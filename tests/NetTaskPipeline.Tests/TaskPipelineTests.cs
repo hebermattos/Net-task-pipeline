@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using NetTaskPipeline;
+using Xunit;
 
 namespace NetTaskPipeline.Tests;
 

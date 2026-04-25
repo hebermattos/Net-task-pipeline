@@ -10,6 +10,7 @@ A lightweight async task pipeline for .NET with sequential and parallel executio
 
 - Sequential task execution
 - Parallel task groups
+- Context-based branching
 - Shared execution context
 - Cancellation support
 - Retry support
@@ -145,6 +146,61 @@ public sealed class AuditTask : ITask
 }
 ```
 
+## Context-based branching
+
+Use `AddBranch` when the pipeline needs to execute a different flow based on values stored in the shared `TaskContext`.
+
+```csharp
+var context = new TaskContext();
+context.Set("IsPremiumCustomer", true);
+
+var result = await new TaskPipeline()
+    .AddTask(new LoadCustomerTask())
+    .AddBranch(
+        condition: ctx => ctx.Get<bool>("IsPremiumCustomer"),
+        whenTrue: premium => premium
+            .AddTask(new ApplyPremiumDiscountTask())
+            .AddTask(new SendPremiumEmailTask()),
+        whenFalse: standard => standard
+            .AddTask(new ApplyStandardDiscountTask())
+            .AddTask(new SendStandardEmailTask()),
+        name: "Customer type decision")
+    .AddTask(new SaveOrderTask())
+    .ExecuteAsync(context);
+```
+
+The branch condition can also be asynchronous.
+
+```csharp
+await new TaskPipeline()
+    .AddBranch(
+        condition: async (ctx, cancellationToken) =>
+        {
+            await Task.Delay(100, cancellationToken);
+            return ctx.Get<decimal>("Total") >= 1000m;
+        },
+        whenTrue: highValue => highValue.AddTask(new RequireManagerApprovalTask()),
+        whenFalse: lowValue => lowValue.AddTask(new AutoApproveTask()),
+        name: "Approval decision")
+    .ExecuteAsync(context);
+```
+
+A branch can contain a full sub-pipeline, including sequential tasks, parallel groups, retry, timeout, and more branches.
+
+```csharp
+await new TaskPipeline()
+    .AddBranch(
+        condition: ctx => ctx.Get<bool>("RequiresDocuments"),
+        whenTrue: documents => documents
+            .AddTask(new ValidateDocumentsTask())
+            .AddTask(
+                new GeneratePdfTask(),
+                new NotifyBackOfficeTask()),
+        whenFalse: noDocuments => noDocuments
+            .AddTask(new SkipDocumentValidationTask()))
+    .ExecuteAsync(context);
+```
+
 ## Execution model
 
 Each `AddTask` call creates one execution group.
@@ -246,6 +302,7 @@ Covers most pipeline features in a single runnable flow:
 - Shared `TaskContext`
 - Sequential execution
 - Parallel task groups
+- Context-based branching
 - `ContinueOnError`
 - Global retry
 - Per-task retry
@@ -282,6 +339,7 @@ The test suite covers:
 - Parallel task groups
 - Shared context values
 - External context injection
+- Context-based branching
 - Retry behavior
 - Timeout behavior
 - `StopOnFirstError`

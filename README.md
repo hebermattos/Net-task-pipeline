@@ -2,6 +2,7 @@
 
 [![build](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/build.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/build.yml)
 [![tests](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml)
+[![coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/hebermattos/Net-task-pipeline/main/coverage-badge.json)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml)
 [![publish-nuget](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/publish-nuget.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/publish-nuget.yml)
 
 A lightweight async task pipeline for .NET with sequential and parallel execution support.
@@ -386,6 +387,16 @@ The test suite covers:
 - `StopOnFirstError`
 - `ContinueOnError`
 - Maximum degree of parallelism
+
+## Test coverage
+
+The `tests` workflow generates a Cobertura report and updates `coverage-badge.json` on pushes to `main`.
+
+The coverage badge uses this Shields endpoint:
+
+```text
+https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/hebermattos/Net-task-pipeline/main/coverage-badge.json
+```
 
 ## Pack
 

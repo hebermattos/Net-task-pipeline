@@ -65,10 +65,7 @@ public sealed class NamedBranchBuilder
         return When(branchName, pipeline => pipeline.AddParallel<TTask1, TTask2, TTask3>());
     }
 
-    /// <summary>
-    /// Adds a named branch using one or more tasks.
-    /// </summary>
-    public NamedBranchBuilder When(string branchName, params ITask[] tasks)
+    internal NamedBranchBuilder When(string branchName, params ITask[] tasks)
     {
         if (tasks == null)
             throw new ArgumentNullException(nameof(tasks));
@@ -108,10 +105,7 @@ public sealed class NamedBranchBuilder
         return Default(pipeline => pipeline.AddParallel<TTask1, TTask2>());
     }
 
-    /// <summary>
-    /// Adds the default branch using one or more tasks.
-    /// </summary>
-    public NamedBranchBuilder Default(params ITask[] tasks)
+    internal NamedBranchBuilder Default(params ITask[] tasks)
     {
         if (tasks == null)
             throw new ArgumentNullException(nameof(tasks));

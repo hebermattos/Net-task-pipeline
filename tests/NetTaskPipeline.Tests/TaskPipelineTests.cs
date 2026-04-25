@@ -233,10 +233,12 @@ public sealed class TaskPipelineTests
                 name: "Customer type decision")
             .ExecuteAsync(context);
 
+        var taskResult = Assert.Single(result.TaskResults);
+
         Assert.True(result.Success);
         Assert.Equal("premium", result.Context.Get<string>("SelectedFlow"));
-        Assert.Contains(result.TaskResults, taskResult => taskResult.TaskName == "Premium flow");
-        Assert.DoesNotContain(result.TaskResults, taskResult => taskResult.TaskName == "Standard flow");
+        Assert.Equal("Customer type decision", taskResult.TaskName);
+        Assert.Equal(TaskExecutionStatus.Success, taskResult.Status);
     }
 
     [Fact]
@@ -261,10 +263,12 @@ public sealed class TaskPipelineTests
                 name: "Customer type decision")
             .ExecuteAsync(context);
 
+        var taskResult = Assert.Single(result.TaskResults);
+
         Assert.True(result.Success);
         Assert.Equal("standard", result.Context.Get<string>("SelectedFlow"));
-        Assert.Contains(result.TaskResults, taskResult => taskResult.TaskName == "Standard flow");
-        Assert.DoesNotContain(result.TaskResults, taskResult => taskResult.TaskName == "Premium flow");
+        Assert.Equal("Customer type decision", taskResult.TaskName);
+        Assert.Equal(TaskExecutionStatus.Success, taskResult.Status);
     }
 
     [Fact]
@@ -293,9 +297,12 @@ public sealed class TaskPipelineTests
                 name: "Approval decision")
             .ExecuteAsync(context);
 
+        var taskResult = Assert.Single(result.TaskResults);
+
         Assert.True(result.Success);
         Assert.True(result.Context.Get<bool>("RequiresApproval"));
-        Assert.Contains(result.TaskResults, taskResult => taskResult.TaskName == "High value flow");
+        Assert.Equal("Approval decision", taskResult.TaskName);
+        Assert.Equal(TaskExecutionStatus.Success, taskResult.Status);
     }
 
     [Fact]

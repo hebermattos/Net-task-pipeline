@@ -39,7 +39,7 @@ foreach (var taskResult in result.TaskResults)
     Console.WriteLine();
 }
 
-internal sealed class LoadOrderTask : ITask
+public sealed class LoadOrderTask : ITask
 {
     public async Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
     {
@@ -53,7 +53,7 @@ internal sealed class LoadOrderTask : ITask
     }
 }
 
-internal sealed class CalculateTotalsTask : ITask
+public sealed class CalculateTotalsTask : ITask
 {
     public async Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
     {
@@ -71,7 +71,7 @@ internal sealed class CalculateTotalsTask : ITask
     }
 }
 
-internal sealed class GenerateInvoiceTask : ITask
+public sealed class GenerateInvoiceTask : ITask
 {
     public async Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
     {
@@ -86,7 +86,7 @@ internal sealed class GenerateInvoiceTask : ITask
     }
 }
 
-internal sealed class SendNotificationTask : ITask
+public sealed class SendNotificationTask : ITask
 {
     public async Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
     {
@@ -98,7 +98,7 @@ internal sealed class SendNotificationTask : ITask
     }
 }
 
-internal sealed class UnstableExternalApiTask : ITask
+public sealed class UnstableExternalApiTask : ITask
 {
     private int _attempts;
 
@@ -117,7 +117,7 @@ internal sealed class UnstableExternalApiTask : ITask
     }
 }
 
-internal sealed class TimeoutTask : ITask
+public sealed class TimeoutTask : ITask
 {
     public async Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
     {
@@ -127,7 +127,7 @@ internal sealed class TimeoutTask : ITask
     }
 }
 
-internal sealed class FinalizeOrderTask : ITask
+public sealed class FinalizeOrderTask : ITask
 {
     public async Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
     {

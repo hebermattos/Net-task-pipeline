@@ -49,15 +49,6 @@ var result = await new TaskPipeline()
 Console.WriteLine($"Pipeline success: {result.Success}");
 ```
 
-You can still pass task instances when needed:
-
-```csharp
-await new TaskPipeline()
-    .AddTask(new ValidateCustomerTask())
-    .AddTask(new GeneratePdfTask(), new SendEmailTask())
-    .ExecuteAsync();
-```
-
 ## Creating a task
 
 ```csharp
@@ -107,15 +98,7 @@ public sealed class SaveOrderTask : ITask
 }
 ```
 
-If a task needs constructor dependencies, pass an instance manually or create it through your own factory before adding it.
-
-```csharp
-var task = new SendEmailTask(emailService);
-
-await new TaskPipeline()
-    .AddTask(task)
-    .ExecuteAsync();
-```
+Tasks that require constructor dependencies are not supported by the generic registration API yet. Keep task dependencies in the shared `TaskContext`, or add a factory/DI integration layer on top of the pipeline.
 
 ## Adding values to the shared context
 

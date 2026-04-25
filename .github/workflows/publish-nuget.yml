@@ -1,0 +1,56 @@
+name: publish-nuget
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: NuGet package version, for example 0.1.0
+        required: true
+        type: string
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Resolve package version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "PACKAGE_VERSION=${{ inputs.version }}" >> "$GITHUB_ENV"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+            echo "PACKAGE_VERSION=$VERSION" >> "$GITHUB_ENV"
+          fi
+
+      - name: Show package version
+        run: echo "Publishing version $PACKAGE_VERSION"
+
+      - name: Restore
+        run: dotnet restore TaskPipeline.sln
+
+      - name: Build
+        run: dotnet build TaskPipeline.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test tests/NetTaskPipeline.Tests/NetTaskPipeline.Tests.csproj --configuration Release --no-build
+
+      - name: Pack
+        run: dotnet pack src/NetTaskPipeline/NetTaskPipeline.csproj --configuration Release --no-build --output artifacts/packages -p:PackageVersion=$PACKAGE_VERSION
+
+      - name: Publish to NuGet
+        run: dotnet nuget push "artifacts/packages/*.nupkg" --api-key "${{ secrets.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate

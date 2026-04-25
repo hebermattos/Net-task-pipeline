@@ -64,10 +64,7 @@ public sealed class TaskPipeline
         return this;
     }
 
-    /// <summary>
-    /// Adds a single sequential task group.
-    /// </summary>
-    public TaskPipeline AddTask(
+    internal TaskPipeline AddTask(
         ITask task,
         int? retryCount = null,
         TimeSpan? timeout = null,
@@ -87,18 +84,12 @@ public sealed class TaskPipeline
         return this;
     }
 
-    /// <summary>
-    /// Adds a parallel task group.
-    /// </summary>
-    public TaskPipeline AddTask(params ITask[] tasks)
+    internal TaskPipeline AddTask(params ITask[] tasks)
     {
         return AddParallel(tasks);
     }
 
-    /// <summary>
-    /// Adds a parallel task group.
-    /// </summary>
-    public TaskPipeline AddParallel(
+    internal TaskPipeline AddParallel(
         IEnumerable<ITask> tasks,
         int? retryCount = null,
         TimeSpan? timeout = null)

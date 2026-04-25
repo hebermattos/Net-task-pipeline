@@ -1,9 +1,5 @@
 # NetTaskPipeline: Async Task Pipeline for .NET
 
-[![build](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/build.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/build.yml)
-[![tests](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml)
-[![coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/hebermattos/Net-task-pipeline/main/coverage-badge.json)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml)
-
 A lightweight async task pipeline for .NET with sequential and parallel execution support.
 
 ## Features
@@ -20,7 +16,6 @@ A lightweight async task pipeline for .NET with sequential and parallel executio
 - Execution result reporting
 - Maximum degree of parallelism for parallel groups
 - Runnable simple and advanced examples
-- Unit tests with xUnit
 
 ## Basic usage
 
@@ -342,49 +337,6 @@ Covers most pipeline features in a single runnable flow:
 
 ```bash
 dotnet run --project examples/AdvancedExample/AdvancedExample.csproj
-```
-
-## Build
-
-```bash
-dotnet build
-```
-
-## Tests
-
-```bash
-dotnet test
-```
-
-Or run the test project directly:
-
-```bash
-dotnet test tests/NetTaskPipeline.Tests/NetTaskPipeline.Tests.csproj
-```
-
-The test suite covers:
-
-- Sequential execution order
-- Parallel task groups
-- Generic task registration
-- Shared context values
-- External context injection
-- Fluent context-based branching
-- Named context-based branching
-- Retry behavior
-- Timeout behavior
-- `StopOnFirstError`
-- `ContinueOnError`
-- Maximum degree of parallelism
-
-## Test coverage
-
-The `tests` workflow generates a Cobertura report and updates `coverage-badge.json` on pushes to `main`.
-
-The coverage badge uses this Shields endpoint:
-
-```text
-https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/hebermattos/Net-task-pipeline/main/coverage-badge.json
 ```
 
 ## License

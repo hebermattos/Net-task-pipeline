@@ -8,6 +8,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+
 jobs:
   tests:
     runs-on: ubuntu-latest
@@ -29,3 +32,47 @@ jobs:
 
       - name: Test
         run: dotnet test tests/NetTaskPipeline.Tests/NetTaskPipeline.Tests.csproj --configuration Release --no-build --collect:"XPlat Code Coverage"
+
+      - name: Generate coverage badge endpoint
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        run: |
+          $coverageFile = Get-ChildItem -Path "tests/NetTaskPipeline.Tests/TestResults" -Filter "coverage.cobertura.xml" -Recurse | Select-Object -First 1
+
+          if (-not $coverageFile) {
+            throw "Coverage file was not found."
+          }
+
+          [xml]$coverage = Get-Content $coverageFile.FullName
+          $lineRate = [double]$coverage.coverage.'line-rate'
+          $percent = [math]::Round($lineRate * 100, 2)
+
+          if ($percent -ge 90) {
+            $color = "brightgreen"
+          } elseif ($percent -ge 80) {
+            $color = "green"
+          } elseif ($percent -ge 70) {
+            $color = "yellowgreen"
+          } elseif ($percent -ge 60) {
+            $color = "yellow"
+          } elseif ($percent -ge 50) {
+            $color = "orange"
+          } else {
+            $color = "red"
+          }
+
+          $badge = [ordered]@{
+            schemaVersion = 1
+            label = "coverage"
+            message = "$percent%"
+            color = $color
+          }
+
+          $badge | ConvertTo-Json | Set-Content -Path "coverage-badge.json" -Encoding UTF8
+
+      - name: Commit coverage badge endpoint
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: Update coverage badge
+          file_pattern: coverage-badge.json

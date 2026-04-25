@@ -4,11 +4,9 @@ Console.WriteLine("Simple NetTaskPipeline example");
 Console.WriteLine();
 
 var result = await new TaskPipeline()
-    .AddTask(new PrintMessageTask("First task"))
-    .AddTask(
-        new PrintMessageTask("Parallel task A"),
-        new PrintMessageTask("Parallel task B"))
-    .AddTask(new PrintMessageTask("Last task"))
+    .AddTask<FirstTask>()
+    .AddParallel<ParallelTaskA, ParallelTaskB>()
+    .AddTask<LastTask>()
     .ExecuteAsync();
 
 Console.WriteLine();
@@ -20,18 +18,38 @@ foreach (var taskResult in result.TaskResults)
     Console.WriteLine($"- {taskResult.TaskName}: {taskResult.Status} ({taskResult.Duration.TotalMilliseconds:N0} ms)");
 }
 
-internal sealed class PrintMessageTask : ITask
+internal sealed class FirstTask : ITask
 {
-    private readonly string _message;
-
-    public PrintMessageTask(string message)
-    {
-        _message = message;
-    }
-
     public async Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
     {
         await Task.Delay(500, cancellationToken);
-        Console.WriteLine(_message);
+        Console.WriteLine("First task");
+    }
+}
+
+internal sealed class ParallelTaskA : ITask
+{
+    public async Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
+    {
+        await Task.Delay(500, cancellationToken);
+        Console.WriteLine("Parallel task A");
+    }
+}
+
+internal sealed class ParallelTaskB : ITask
+{
+    public async Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
+    {
+        await Task.Delay(500, cancellationToken);
+        Console.WriteLine("Parallel task B");
+    }
+}
+
+internal sealed class LastTask : ITask
+{
+    public async Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
+    {
+        await Task.Delay(500, cancellationToken);
+        Console.WriteLine("Last task");
     }
 }

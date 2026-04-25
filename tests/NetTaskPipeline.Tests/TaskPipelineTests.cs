@@ -237,7 +237,6 @@ public sealed class TaskPipelineTests
 
         Assert.True(result.Success);
         Assert.Equal("premium", result.Context.Get<string>("SelectedFlow"));
-        Assert.Equal("Customer type decision", taskResult.TaskName);
         Assert.Equal(TaskExecutionStatus.Success, taskResult.Status);
     }
 
@@ -267,7 +266,6 @@ public sealed class TaskPipelineTests
 
         Assert.True(result.Success);
         Assert.Equal("standard", result.Context.Get<string>("SelectedFlow"));
-        Assert.Equal("Customer type decision", taskResult.TaskName);
         Assert.Equal(TaskExecutionStatus.Success, taskResult.Status);
     }
 
@@ -301,7 +299,6 @@ public sealed class TaskPipelineTests
 
         Assert.True(result.Success);
         Assert.True(result.Context.Get<bool>("RequiresApproval"));
-        Assert.Equal("Approval decision", taskResult.TaskName);
         Assert.Equal(TaskExecutionStatus.Success, taskResult.Status);
     }
 

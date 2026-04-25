@@ -2,6 +2,7 @@
 
 [![build](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/build.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/build.yml)
 [![tests](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml)
+[![publish-nuget](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/publish-nuget.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/publish-nuget.yml)
 
 A lightweight async task pipeline for .NET with sequential and parallel execution support.
 
@@ -19,6 +20,7 @@ A lightweight async task pipeline for .NET with sequential and parallel executio
 - NuGet-ready project configuration
 - Runnable simple and advanced examples
 - Unit tests with xUnit
+- GitHub Actions workflow for NuGet publishing
 
 ## Installation
 
@@ -291,6 +293,63 @@ The test suite covers:
 ```bash
 dotnet pack src/NetTaskPipeline/NetTaskPipeline.csproj -c Release
 ```
+
+## Publish to NuGet
+
+The repository includes a GitHub Actions workflow to publish the package to NuGet:
+
+```text
+.github/workflows/publish-nuget.yml
+```
+
+Before running it, create a repository secret named `NUGET_API_KEY` with your NuGet API key.
+
+GitHub path:
+
+```text
+Settings > Secrets and variables > Actions > New repository secret
+```
+
+Secret name:
+
+```text
+NUGET_API_KEY
+```
+
+### Manual publish
+
+Go to:
+
+```text
+Actions > publish-nuget > Run workflow
+```
+
+Then inform the package version, for example:
+
+```text
+0.1.0
+```
+
+The workflow will run:
+
+```bash
+dotnet restore TaskPipeline.sln
+dotnet build TaskPipeline.sln --configuration Release --no-restore
+dotnet test tests/NetTaskPipeline.Tests/NetTaskPipeline.Tests.csproj --configuration Release --no-build
+dotnet pack src/NetTaskPipeline/NetTaskPipeline.csproj --configuration Release --no-build --output artifacts/packages -p:PackageVersion=$PACKAGE_VERSION
+dotnet nuget push "artifacts/packages/*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+```
+
+### Publish by tag
+
+You can also publish by pushing a version tag:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The package version will be resolved from the tag name, without the leading `v`.
 
 ## License
 

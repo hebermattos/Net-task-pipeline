@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PackageId>NetTaskPipeline</PackageId>
+    <Title>NetTaskPipeline</Title>
+    <Description>A lightweight async task pipeline for .NET with sequential and parallel execution support.</Description>
+    <Authors>Heber Mattos</Authors>
+    <Company>Heber Mattos</Company>
+    <PackageTags>task-pipeline;pipeline;async;parallel;workflow;dotnet</PackageTags>
+    <PackageProjectUrl>https://github.com/hebermattos/Net-task-pipeline</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/hebermattos/Net-task-pipeline</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>

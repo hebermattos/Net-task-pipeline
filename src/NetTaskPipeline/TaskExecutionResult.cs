@@ -8,44 +8,44 @@ namespace NetTaskPipeline;
 public sealed class TaskExecutionResult
 {
     /// <summary>
-    /// Gets the task display name.
+    /// Gets or sets the task display name.
     /// </summary>
-    public string TaskName { get; init; } = string.Empty;
+    public string TaskName { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets the index of the group that executed the task.
+    /// Gets or sets the index of the group that executed the task.
     /// </summary>
-    public int GroupIndex { get; init; }
+    public int GroupIndex { get; set; }
 
     /// <summary>
-    /// Gets the number of attempts used to execute the task.
+    /// Gets or sets the number of attempts used to execute the task.
     /// </summary>
-    public int Attempts { get; init; }
+    public int Attempts { get; set; }
 
     /// <summary>
-    /// Gets the final execution status.
+    /// Gets or sets the final execution status.
     /// </summary>
-    public TaskExecutionStatus Status { get; init; }
+    public TaskExecutionStatus Status { get; set; }
 
     /// <summary>
-    /// Gets the exception thrown by the task, if any.
+    /// Gets or sets the exception thrown by the task, if any.
     /// </summary>
-    public Exception? Exception { get; init; }
+    public Exception? Exception { get; set; }
 
     /// <summary>
-    /// Gets the task execution duration.
+    /// Gets or sets the task execution duration.
     /// </summary>
-    public TimeSpan Duration { get; init; }
+    public TimeSpan Duration { get; set; }
 
     /// <summary>
-    /// Gets the UTC start timestamp.
+    /// Gets or sets the UTC start timestamp.
     /// </summary>
-    public DateTimeOffset StartedAt { get; init; }
+    public DateTimeOffset StartedAt { get; set; }
 
     /// <summary>
-    /// Gets the UTC finish timestamp.
+    /// Gets or sets the UTC finish timestamp.
     /// </summary>
-    public DateTimeOffset FinishedAt { get; init; }
+    public DateTimeOffset FinishedAt { get; set; }
 
     /// <summary>
     /// Gets whether the task completed successfully.

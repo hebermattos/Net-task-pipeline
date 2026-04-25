@@ -11,6 +11,52 @@ namespace NetTaskPipeline;
 public static class TaskPipelineBranchExtensions
 {
     /// <summary>
+    /// Adds a named branch step using a fluent branch builder.
+    /// </summary>
+    public static TaskPipeline AddBranch(
+        this TaskPipeline pipeline,
+        Func<TaskContext, string> branchNameSelector,
+        Action<NamedBranchBuilder> configure,
+        string? name = null)
+    {
+        if (branchNameSelector == null)
+            throw new ArgumentNullException(nameof(branchNameSelector));
+
+        return pipeline.AddBranch(
+            (context, _) => Task.FromResult(branchNameSelector(context)),
+            configure,
+            name);
+    }
+
+    /// <summary>
+    /// Adds an asynchronous named branch step using a fluent branch builder.
+    /// </summary>
+    public static TaskPipeline AddBranch(
+        this TaskPipeline pipeline,
+        Func<TaskContext, CancellationToken, Task<string>> branchNameSelector,
+        Action<NamedBranchBuilder> configure,
+        string? name = null)
+    {
+        if (pipeline == null)
+            throw new ArgumentNullException(nameof(pipeline));
+
+        if (branchNameSelector == null)
+            throw new ArgumentNullException(nameof(branchNameSelector));
+
+        if (configure == null)
+            throw new ArgumentNullException(nameof(configure));
+
+        var builder = new NamedBranchBuilder();
+        configure(builder);
+
+        return pipeline.AddNamedBranch(
+            branchNameSelector,
+            builder.Branches,
+            builder.DefaultBranch,
+            name);
+    }
+
+    /// <summary>
     /// Adds a named branch step. The selected branch name is resolved from the shared context.
     /// </summary>
     public static TaskPipeline AddNamedBranch(

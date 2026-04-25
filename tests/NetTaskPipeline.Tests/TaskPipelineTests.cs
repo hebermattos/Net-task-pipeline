@@ -198,6 +198,111 @@ public sealed class TaskPipelineTests
         Assert.Equal(2, maxRunning);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_WithBranchTrue_ExecutesTrueFlow()
+    {
+        var context = new TaskContext();
+        context.Set("IsPremiumCustomer", true);
+
+        var result = await new TaskPipeline()
+            .AddBranch(
+                ctx => ctx.Get<bool>("IsPremiumCustomer"),
+                whenTrue: branch => branch.AddTask(new DelegateTask("Premium flow", ctx =>
+                {
+                    ctx.Set("SelectedFlow", "premium");
+                    return Task.CompletedTask;
+                })),
+                whenFalse: branch => branch.AddTask(new DelegateTask("Standard flow", ctx =>
+                {
+                    ctx.Set("SelectedFlow", "standard");
+                    return Task.CompletedTask;
+                })),
+                name: "Customer type decision")
+            .ExecuteAsync(context);
+
+        Assert.True(result.Success);
+        Assert.Equal("premium", result.Context.Get<string>("SelectedFlow"));
+        Assert.Contains(result.TaskResults, taskResult => taskResult.TaskName == "Premium flow");
+        Assert.DoesNotContain(result.TaskResults, taskResult => taskResult.TaskName == "Standard flow");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithBranchFalse_ExecutesFalseFlow()
+    {
+        var context = new TaskContext();
+        context.Set("IsPremiumCustomer", false);
+
+        var result = await new TaskPipeline()
+            .AddBranch(
+                ctx => ctx.Get<bool>("IsPremiumCustomer"),
+                whenTrue: branch => branch.AddTask(new DelegateTask("Premium flow", ctx =>
+                {
+                    ctx.Set("SelectedFlow", "premium");
+                    return Task.CompletedTask;
+                })),
+                whenFalse: branch => branch.AddTask(new DelegateTask("Standard flow", ctx =>
+                {
+                    ctx.Set("SelectedFlow", "standard");
+                    return Task.CompletedTask;
+                })),
+                name: "Customer type decision")
+            .ExecuteAsync(context);
+
+        Assert.True(result.Success);
+        Assert.Equal("standard", result.Context.Get<string>("SelectedFlow"));
+        Assert.Contains(result.TaskResults, taskResult => taskResult.TaskName == "Standard flow");
+        Assert.DoesNotContain(result.TaskResults, taskResult => taskResult.TaskName == "Premium flow");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithAsyncBranchCondition_ExecutesSelectedFlow()
+    {
+        var context = new TaskContext();
+        context.Set("Total", 1500m);
+
+        var result = await new TaskPipeline()
+            .AddBranch(
+                async (ctx, cancellationToken) =>
+                {
+                    await Task.Delay(50, cancellationToken);
+                    return ctx.Get<decimal>("Total") >= 1000m;
+                },
+                whenTrue: branch => branch.AddTask(new DelegateTask("High value flow", ctx =>
+                {
+                    ctx.Set("RequiresApproval", true);
+                    return Task.CompletedTask;
+                })),
+                whenFalse: branch => branch.AddTask(new DelegateTask("Low value flow", ctx =>
+                {
+                    ctx.Set("RequiresApproval", false);
+                    return Task.CompletedTask;
+                })),
+                name: "Approval decision")
+            .ExecuteAsync(context);
+
+        Assert.True(result.Success);
+        Assert.True(result.Context.Get<bool>("RequiresApproval"));
+        Assert.Contains(result.TaskResults, taskResult => taskResult.TaskName == "High value flow");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithBranchConditionFailure_ReturnsFailedResult()
+    {
+        var result = await new TaskPipeline()
+            .AddBranch(
+                _ => throw new InvalidOperationException("The branch condition failed."),
+                whenTrue: branch => branch.AddTask(new DelegateTask("Should not run", _ => Task.CompletedTask)),
+                name: "Failing decision")
+            .ExecuteAsync();
+
+        var taskResult = Assert.Single(result.TaskResults);
+
+        Assert.False(result.Success);
+        Assert.Equal("Failing decision", taskResult.TaskName);
+        Assert.Equal(TaskExecutionStatus.Failed, taskResult.Status);
+        Assert.IsType<InvalidOperationException>(taskResult.Exception);
+    }
+
     private static void UpdateMax(ref int target, int value)
     {
         int initialValue;

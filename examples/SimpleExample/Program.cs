@@ -18,7 +18,7 @@ foreach (var taskResult in result.TaskResults)
     Console.WriteLine($"- {taskResult.TaskName}: {taskResult.Status} ({taskResult.Duration.TotalMilliseconds:N0} ms)");
 }
 
-internal sealed class FirstTask : ITask
+public sealed class FirstTask : ITask
 {
     public async Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
     {
@@ -27,7 +27,7 @@ internal sealed class FirstTask : ITask
     }
 }
 
-internal sealed class ParallelTaskA : ITask
+public sealed class ParallelTaskA : ITask
 {
     public async Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
     {
@@ -36,7 +36,7 @@ internal sealed class ParallelTaskA : ITask
     }
 }
 
-internal sealed class ParallelTaskB : ITask
+public sealed class ParallelTaskB : ITask
 {
     public async Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
     {
@@ -45,7 +45,7 @@ internal sealed class ParallelTaskB : ITask
     }
 }
 
-internal sealed class LastTask : ITask
+public sealed class LastTask : ITask
 {
     public async Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
     {

@@ -36,6 +36,36 @@ public sealed class NamedBranchBuilder
     }
 
     /// <summary>
+    /// Adds a named branch using a task type.
+    /// </summary>
+    public NamedBranchBuilder When<TTask>(string branchName)
+        where TTask : ITask, new()
+    {
+        return When(branchName, pipeline => pipeline.AddTask<TTask>());
+    }
+
+    /// <summary>
+    /// Adds a named branch using two task types executed in parallel.
+    /// </summary>
+    public NamedBranchBuilder When<TTask1, TTask2>(string branchName)
+        where TTask1 : ITask, new()
+        where TTask2 : ITask, new()
+    {
+        return When(branchName, pipeline => pipeline.AddParallel<TTask1, TTask2>());
+    }
+
+    /// <summary>
+    /// Adds a named branch using three task types executed in parallel.
+    /// </summary>
+    public NamedBranchBuilder When<TTask1, TTask2, TTask3>(string branchName)
+        where TTask1 : ITask, new()
+        where TTask2 : ITask, new()
+        where TTask3 : ITask, new()
+    {
+        return When(branchName, pipeline => pipeline.AddParallel<TTask1, TTask2, TTask3>());
+    }
+
+    /// <summary>
     /// Adds a named branch using one or more tasks.
     /// </summary>
     public NamedBranchBuilder When(string branchName, params ITask[] tasks)
@@ -57,6 +87,25 @@ public sealed class NamedBranchBuilder
         _defaultBranch = configure;
 
         return this;
+    }
+
+    /// <summary>
+    /// Adds the default branch using a task type.
+    /// </summary>
+    public NamedBranchBuilder Default<TTask>()
+        where TTask : ITask, new()
+    {
+        return Default(pipeline => pipeline.AddTask<TTask>());
+    }
+
+    /// <summary>
+    /// Adds the default branch using two task types executed in parallel.
+    /// </summary>
+    public NamedBranchBuilder Default<TTask1, TTask2>()
+        where TTask1 : ITask, new()
+        where TTask2 : ITask, new()
+    {
+        return Default(pipeline => pipeline.AddParallel<TTask1, TTask2>());
     }
 
     /// <summary>

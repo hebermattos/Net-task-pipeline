@@ -10,7 +10,7 @@ A lightweight async task pipeline for .NET with sequential and parallel executio
 
 - Sequential task execution
 - Parallel task groups
-- Context-based branching
+- Named context-based branching
 - Shared execution context
 - Cancellation support
 - Retry support
@@ -82,7 +82,7 @@ public sealed class LoadCustomerTask : ITask
 
         context.Set("CustomerId", 123);
         context.Set("CustomerName", "John Smith");
-        context.Set("IsActive", true);
+        context.Set("CustomerType", "premium");
     }
 }
 ```
@@ -146,58 +146,79 @@ public sealed class AuditTask : ITask
 }
 ```
 
-## Context-based branching
+## Named context-based branching
 
-Use `AddBranch` when the pipeline needs to execute a different flow based on values stored in the shared `TaskContext`.
+Use `AddNamedBranch` when the pipeline needs to choose between multiple flows based on a string value from the shared `TaskContext`.
 
 ```csharp
 var context = new TaskContext();
-context.Set("IsPremiumCustomer", true);
+context.Set("CustomerType", "premium");
 
 var result = await new TaskPipeline()
     .AddTask(new LoadCustomerTask())
-    .AddBranch(
-        condition: ctx => ctx.Get<bool>("IsPremiumCustomer"),
-        whenTrue: premium => premium
-            .AddTask(new ApplyPremiumDiscountTask())
-            .AddTask(new SendPremiumEmailTask()),
-        whenFalse: standard => standard
-            .AddTask(new ApplyStandardDiscountTask())
-            .AddTask(new SendStandardEmailTask()),
+    .AddNamedBranch(
+        branchNameSelector: ctx => ctx.Get<string>("CustomerType"),
+        branches: new Dictionary<string, Action<TaskPipeline>>
+        {
+            ["premium"] = premium => premium
+                .AddTask(new ApplyPremiumDiscountTask())
+                .AddTask(new SendPremiumEmailTask()),
+
+            ["standard"] = standard => standard
+                .AddTask(new ApplyStandardDiscountTask())
+                .AddTask(new SendStandardEmailTask()),
+
+            ["blocked"] = blocked => blocked
+                .AddTask(new BlockOrderTask())
+        },
+        defaultBranch: fallback => fallback
+            .AddTask(new ReviewCustomerManuallyTask()),
         name: "Customer type decision")
     .AddTask(new SaveOrderTask())
     .ExecuteAsync(context);
 ```
 
-The branch condition can also be asynchronous.
+The branch selector can also be asynchronous.
 
 ```csharp
 await new TaskPipeline()
-    .AddBranch(
-        condition: async (ctx, cancellationToken) =>
+    .AddNamedBranch(
+        branchNameSelector: async (ctx, cancellationToken) =>
         {
             await Task.Delay(100, cancellationToken);
-            return ctx.Get<decimal>("Total") >= 1000m;
+            return ctx.Get<decimal>("Total") >= 1000m
+                ? "high-value"
+                : "low-value";
         },
-        whenTrue: highValue => highValue.AddTask(new RequireManagerApprovalTask()),
-        whenFalse: lowValue => lowValue.AddTask(new AutoApproveTask()),
+        branches: new Dictionary<string, Action<TaskPipeline>>
+        {
+            ["high-value"] = highValue => highValue
+                .AddTask(new RequireManagerApprovalTask()),
+
+            ["low-value"] = lowValue => lowValue
+                .AddTask(new AutoApproveTask())
+        },
         name: "Approval decision")
     .ExecuteAsync(context);
 ```
 
-A branch can contain a full sub-pipeline, including sequential tasks, parallel groups, retry, timeout, and more branches.
+A named branch can contain a full sub-pipeline, including sequential tasks, parallel groups, retry, timeout, and other branch steps.
 
 ```csharp
 await new TaskPipeline()
-    .AddBranch(
-        condition: ctx => ctx.Get<bool>("RequiresDocuments"),
-        whenTrue: documents => documents
-            .AddTask(new ValidateDocumentsTask())
-            .AddTask(
-                new GeneratePdfTask(),
-                new NotifyBackOfficeTask()),
-        whenFalse: noDocuments => noDocuments
-            .AddTask(new SkipDocumentValidationTask()))
+    .AddNamedBranch(
+        branchNameSelector: ctx => ctx.Get<string>("DocumentFlow"),
+        branches: new Dictionary<string, Action<TaskPipeline>>
+        {
+            ["required"] = documents => documents
+                .AddTask(new ValidateDocumentsTask())
+                .AddTask(
+                    new GeneratePdfTask(),
+                    new NotifyBackOfficeTask()),
+
+            ["skipped"] = noDocuments => noDocuments
+                .AddTask(new SkipDocumentValidationTask())
+        })
     .ExecuteAsync(context);
 ```
 
@@ -302,7 +323,7 @@ Covers most pipeline features in a single runnable flow:
 - Shared `TaskContext`
 - Sequential execution
 - Parallel task groups
-- Context-based branching
+- Named context-based branching
 - `ContinueOnError`
 - Global retry
 - Per-task retry
@@ -339,7 +360,7 @@ The test suite covers:
 - Parallel task groups
 - Shared context values
 - External context injection
-- Context-based branching
+- Named context-based branching
 - Retry behavior
 - Timeout behavior
 - `StopOnFirstError`

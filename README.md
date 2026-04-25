@@ -1,5 +1,8 @@
 # NetTaskPipeline
 
+[![build](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/build.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/build.yml)
+[![tests](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml)
+
 A lightweight async task pipeline for .NET with sequential and parallel execution support.
 
 ## Features
@@ -15,6 +18,7 @@ A lightweight async task pipeline for .NET with sequential and parallel executio
 - Maximum degree of parallelism for parallel groups
 - NuGet-ready project configuration
 - Runnable simple and advanced examples
+- Unit tests with xUnit
 
 ## Installation
 
@@ -257,6 +261,30 @@ dotnet run --project examples/AdvancedExample/AdvancedExample.csproj
 ```bash
 dotnet build
 ```
+
+## Tests
+
+```bash
+dotnet test
+```
+
+Or run the test project directly:
+
+```bash
+dotnet test tests/NetTaskPipeline.Tests/NetTaskPipeline.Tests.csproj
+```
+
+The test suite covers:
+
+- Sequential execution order
+- Parallel task groups
+- Shared context values
+- External context injection
+- Retry behavior
+- Timeout behavior
+- `StopOnFirstError`
+- `ContinueOnError`
+- Maximum degree of parallelism
 
 ## Pack
 

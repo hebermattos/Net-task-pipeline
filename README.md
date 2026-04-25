@@ -14,6 +14,7 @@ A lightweight async task pipeline for .NET with sequential and parallel executio
 - Execution result reporting
 - Maximum degree of parallelism for parallel groups
 - NuGet-ready project configuration
+- Runnable simple and advanced examples
 
 ## Installation
 
@@ -157,6 +158,37 @@ foreach (var taskResult in result.TaskResults)
 {
     Console.WriteLine($"{taskResult.TaskName}: {taskResult.Status} in {taskResult.Duration}");
 }
+```
+
+## Runnable examples
+
+The repository includes two executable examples.
+
+### Simple example
+
+Covers sequential and parallel execution with a final result summary.
+
+```bash
+dotnet run --project examples/SimpleExample/SimpleExample.csproj
+```
+
+### Advanced example
+
+Covers most pipeline features in a single runnable flow:
+
+- Shared `TaskContext`
+- Sequential execution
+- Parallel task groups
+- `ContinueOnError`
+- Global retry
+- Per-task retry
+- Global timeout
+- Per-task timeout
+- Maximum degree of parallelism
+- Execution result report
+
+```bash
+dotnet run --project examples/AdvancedExample/AdvancedExample.csproj
 ```
 
 ## Build

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using NetTaskPipeline;
 using Xunit;
 
@@ -30,21 +29,35 @@ public sealed class TaskPipelineTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_WithParallelGroup_ExecutesTasksInParallel()
+    public async Task ExecuteAsync_WithParallelGroup_ExecutesTasksConcurrently()
     {
-        var stopwatch = Stopwatch.StartNew();
+        var running = 0;
+        var maxRunning = 0;
+
+        async Task ExecuteConcurrentTask(TaskContext _, CancellationToken cancellationToken)
+        {
+            var current = Interlocked.Increment(ref running);
+            UpdateMax(ref maxRunning, current);
+
+            try
+            {
+                await Task.Delay(200, cancellationToken);
+            }
+            finally
+            {
+                Interlocked.Decrement(ref running);
+            }
+        }
 
         var result = await new TaskPipeline()
             .AddTask(
-                new DelayTask("Delay A", TimeSpan.FromMilliseconds(700)),
-                new DelayTask("Delay B", TimeSpan.FromMilliseconds(700)))
+                new DelegateTask("Concurrent A", ExecuteConcurrentTask),
+                new DelegateTask("Concurrent B", ExecuteConcurrentTask))
             .ExecuteAsync();
-
-        stopwatch.Stop();
 
         Assert.True(result.Success);
         Assert.Equal(2, result.TaskResults.Count);
-        Assert.True(stopwatch.Elapsed < TimeSpan.FromMilliseconds(1200));
+        Assert.Equal(2, maxRunning);
     }
 
     [Fact]

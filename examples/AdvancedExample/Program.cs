@@ -11,14 +11,11 @@ var result = await new TaskPipeline()
     .WithRetry(1)
     .WithTimeout(TimeSpan.FromSeconds(5))
     .WithMaxDegreeOfParallelism(2)
-    .AddTask(new LoadOrderTask(), name: "Load order")
-    .AddTask(
-        new CalculateTotalsTask(),
-        new GenerateInvoiceTask(),
-        new SendNotificationTask())
-    .AddTask(new UnstableExternalApiTask(), retryCount: 2, timeout: TimeSpan.FromSeconds(3), name: "External API with retry")
-    .AddTask(new TimeoutTask(), timeout: TimeSpan.FromSeconds(1), name: "Task with timeout")
-    .AddTask(new FinalizeOrderTask(), name: "Finalize order")
+    .AddTask<LoadOrderTask>(name: "Load order")
+    .AddParallel<CalculateTotalsTask, GenerateInvoiceTask, SendNotificationTask>()
+    .AddTask<UnstableExternalApiTask>(retryCount: 2, timeout: TimeSpan.FromSeconds(3), name: "External API with retry")
+    .AddTask<TimeoutTask>(timeout: TimeSpan.FromSeconds(1), name: "Task with timeout")
+    .AddTask<FinalizeOrderTask>(name: "Finalize order")
     .ExecuteAsync(context);
 
 Console.WriteLine();

@@ -10,6 +10,7 @@ A lightweight async task pipeline for .NET with sequential and parallel executio
 
 - Sequential task execution
 - Parallel task groups
+- Generic task registration with `AddTask<TTask>()`
 - Fluent context-based branching
 - Shared execution context
 - Cancellation support
@@ -41,14 +42,20 @@ var result = await new TaskPipeline()
     .WithRetry(2)
     .WithTimeout(TimeSpan.FromSeconds(10))
     .WithMaxDegreeOfParallelism(3)
-    .AddTask(new ValidateCustomerTask())
-    .AddTask(
-        new GeneratePdfTask(),
-        new SendEmailTask(),
-        new SaveLogTask())
+    .AddTask<ValidateCustomerTask>()
+    .AddParallel<GeneratePdfTask, SendEmailTask, SaveLogTask>()
     .ExecuteAsync();
 
 Console.WriteLine($"Pipeline success: {result.Success}");
+```
+
+You can still pass task instances when needed:
+
+```csharp
+await new TaskPipeline()
+    .AddTask(new ValidateCustomerTask())
+    .AddTask(new GeneratePdfTask(), new SendEmailTask())
+    .ExecuteAsync();
 ```
 
 ## Creating a task
@@ -65,6 +72,49 @@ public sealed class ValidateCustomerTask : ITask
         context.Set("CustomerId", 123);
     }
 }
+```
+
+## Generic task registration
+
+Use `AddTask<TTask>()` to add a sequential task without creating the instance manually.
+
+```csharp
+await new TaskPipeline()
+    .AddTask<ValidateCustomerTask>()
+    .AddTask<LoadCustomerTask>()
+    .ExecuteAsync();
+```
+
+Use `AddParallel<TTask1, TTask2>()` or `AddParallel<TTask1, TTask2, TTask3>()` to add a parallel task group by type.
+
+```csharp
+await new TaskPipeline()
+    .AddTask<ValidateCustomerTask>()
+    .AddParallel<GeneratePdfTask, SendEmailTask, SaveLogTask>()
+    .AddTask<SaveOrderTask>()
+    .ExecuteAsync();
+```
+
+Generic task registration requires a public parameterless constructor because the pipeline creates the task instance internally.
+
+```csharp
+public sealed class SaveOrderTask : ITask
+{
+    public Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+}
+```
+
+If a task needs constructor dependencies, pass an instance manually or create it through your own factory before adding it.
+
+```csharp
+var task = new SendEmailTask(emailService);
+
+await new TaskPipeline()
+    .AddTask(task)
+    .ExecuteAsync();
 ```
 
 ## Adding values to the shared context
@@ -91,8 +141,8 @@ Every task receives the same `TaskContext` instance during a pipeline execution,
 
 ```csharp
 await new TaskPipeline()
-    .AddTask(new LoadCustomerTask())
-    .AddTask(new SendCustomerEmailTask())
+    .AddTask<LoadCustomerTask>()
+    .AddTask<SendCustomerEmailTask>()
     .ExecuteAsync();
 ```
 
@@ -104,8 +154,8 @@ context.Set("CorrelationId", Guid.NewGuid().ToString("N"));
 context.Set("RequestedBy", "system");
 
 var result = await new TaskPipeline()
-    .AddTask(new LoadCustomerTask())
-    .AddTask(new SendCustomerEmailTask())
+    .AddTask<LoadCustomerTask>()
+    .AddTask<SendCustomerEmailTask>()
     .ExecuteAsync(context);
 ```
 
@@ -158,12 +208,12 @@ var result = await new TaskPipeline()
     .AddBranch(
         ctx => ctx.Get<string>("CustomerType"),
         branch => branch
-            .When("premium", new ApplyPremiumDiscountTask(), new SendPremiumEmailTask())
-            .When("standard", new ApplyStandardDiscountTask(), new SendStandardEmailTask())
-            .When("blocked", new BlockOrderTask())
-            .Default(new ReviewCustomerManuallyTask()),
+            .When<ApplyPremiumDiscountTask, SendPremiumEmailTask>("premium")
+            .When<ApplyStandardDiscountTask, SendStandardEmailTask>("standard")
+            .When<BlockOrderTask>("blocked")
+            .Default<ReviewCustomerManuallyTask>(),
         name: "Customer type decision")
-    .AddTask(new SaveOrderTask())
+    .AddTask<SaveOrderTask>()
     .ExecuteAsync(context);
 ```
 
@@ -176,14 +226,12 @@ await new TaskPipeline()
         branch => branch
             .When("premium", premium => premium
                 .WithRetry(2)
-                .AddTask(new ApplyPremiumDiscountTask())
-                .AddTask(
-                    new SendPremiumEmailTask(),
-                    new NotifySalesTeamTask()))
+                .AddTask<ApplyPremiumDiscountTask>()
+                .AddParallel<SendPremiumEmailTask, NotifySalesTeamTask>())
             .When("standard", standard => standard
-                .AddTask(new ApplyStandardDiscountTask()))
+                .AddTask<ApplyStandardDiscountTask>())
             .Default(fallback => fallback
-                .AddTask(new ReviewCustomerManuallyTask())))
+                .AddTask<ReviewCustomerManuallyTask>()))
     .ExecuteAsync(context);
 ```
 
@@ -200,8 +248,8 @@ await new TaskPipeline()
                 : "low-value";
         },
         branch => branch
-            .When("high-value", new RequireManagerApprovalTask())
-            .When("low-value", new AutoApproveTask()),
+            .When<RequireManagerApprovalTask>("high-value")
+            .When<AutoApproveTask>("low-value"),
         name: "Approval decision")
     .ExecuteAsync(context);
 ```
@@ -214,9 +262,9 @@ Each `AddTask` call creates one execution group.
 
 ```csharp
 await new TaskPipeline()
-    .AddTask(new FirstTask())
-    .AddTask(new SecondTask(), new ThirdTask())
-    .AddTask(new FourthTask())
+    .AddTask<FirstTask>()
+    .AddParallel<SecondTask, ThirdTask>()
+    .AddTask<FourthTask>()
     .ExecuteAsync();
 ```
 
@@ -235,8 +283,8 @@ FourthTask
 ```csharp
 await new TaskPipeline()
     .OnError(ErrorMode.ContinueOnError)
-    .AddTask(new FirstTask())
-    .AddTask(new SecondTask())
+    .AddTask<FirstTask>()
+    .AddTask<SecondTask>()
     .ExecuteAsync();
 ```
 
@@ -250,7 +298,7 @@ Available modes:
 ```csharp
 await new TaskPipeline()
     .WithRetry(3)
-    .AddTask(new CallExternalApiTask())
+    .AddTask<CallExternalApiTask>()
     .ExecuteAsync();
 ```
 
@@ -258,7 +306,7 @@ Per-task retry:
 
 ```csharp
 await new TaskPipeline()
-    .AddTask(new CallExternalApiTask(), retryCount: 3)
+    .AddTask<CallExternalApiTask>(retryCount: 3)
     .ExecuteAsync();
 ```
 
@@ -267,7 +315,7 @@ await new TaskPipeline()
 ```csharp
 await new TaskPipeline()
     .WithTimeout(TimeSpan.FromSeconds(30))
-    .AddTask(new LongRunningTask())
+    .AddTask<LongRunningTask>()
     .ExecuteAsync();
 ```
 
@@ -275,7 +323,7 @@ Per-task timeout:
 
 ```csharp
 await new TaskPipeline()
-    .AddTask(new LongRunningTask(), timeout: TimeSpan.FromSeconds(5))
+    .AddTask<LongRunningTask>(timeout: TimeSpan.FromSeconds(5))
     .ExecuteAsync();
 ```
 
@@ -310,6 +358,7 @@ Covers most pipeline features in a single runnable flow:
 - Sequential execution
 - Parallel task groups
 - Fluent context-based branching
+- Generic task registration
 - `ContinueOnError`
 - Global retry
 - Per-task retry
@@ -344,6 +393,7 @@ The test suite covers:
 
 - Sequential execution order
 - Parallel task groups
+- Generic task registration
 - Shared context values
 - External context injection
 - Fluent context-based branching

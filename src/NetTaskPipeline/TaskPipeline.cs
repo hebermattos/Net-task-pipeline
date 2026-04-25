@@ -12,7 +12,7 @@ namespace NetTaskPipeline;
 /// </summary>
 public sealed class TaskPipeline
 {
-    private readonly List<TaskGroup> _groups = new List<TaskGroup>();
+    private readonly List<PipelineStep> _steps = new List<PipelineStep>();
 
     private ErrorMode _errorMode = ErrorMode.StopOnFirstError;
     private int _defaultRetryCount;
@@ -82,7 +82,7 @@ public sealed class TaskPipeline
             retryCount,
             timeout);
 
-        _groups.Add(TaskGroup.Sequential(pipelineTask));
+        _steps.Add(PipelineStep.TaskGroup(TaskGroup.Sequential(pipelineTask)));
 
         return this;
     }
@@ -125,12 +125,66 @@ public sealed class TaskPipeline
 
         if (pipelineTasks.Count == 1)
         {
-            _groups.Add(TaskGroup.Sequential(pipelineTasks[0]));
+            _steps.Add(PipelineStep.TaskGroup(TaskGroup.Sequential(pipelineTasks[0])));
         }
         else
         {
-            _groups.Add(TaskGroup.Parallel(pipelineTasks));
+            _steps.Add(PipelineStep.TaskGroup(TaskGroup.Parallel(pipelineTasks)));
         }
+
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a conditional branch that executes one pipeline when the condition is true and another pipeline when it is false.
+    /// </summary>
+    public TaskPipeline AddBranch(
+        Func<TaskContext, bool> condition,
+        Action<TaskPipeline> whenTrue,
+        Action<TaskPipeline>? whenFalse = null,
+        string? name = null)
+    {
+        if (condition == null)
+            throw new ArgumentNullException(nameof(condition));
+
+        return AddBranch(
+            (context, _) => Task.FromResult(condition(context)),
+            whenTrue,
+            whenFalse,
+            name);
+    }
+
+    /// <summary>
+    /// Adds an asynchronous conditional branch that executes one pipeline when the condition is true and another pipeline when it is false.
+    /// </summary>
+    public TaskPipeline AddBranch(
+        Func<TaskContext, CancellationToken, Task<bool>> condition,
+        Action<TaskPipeline> whenTrue,
+        Action<TaskPipeline>? whenFalse = null,
+        string? name = null)
+    {
+        if (condition == null)
+            throw new ArgumentNullException(nameof(condition));
+
+        if (whenTrue == null)
+            throw new ArgumentNullException(nameof(whenTrue));
+
+        var truePipeline = CreateChildPipeline();
+        whenTrue(truePipeline);
+
+        TaskPipeline? falsePipeline = null;
+
+        if (whenFalse != null)
+        {
+            falsePipeline = CreateChildPipeline();
+            whenFalse(falsePipeline);
+        }
+
+        _steps.Add(PipelineStep.Branch(new BranchStep(
+            name ?? "Conditional branch",
+            condition,
+            truePipeline,
+            falsePipeline)));
 
         return this;
     }
@@ -156,42 +210,113 @@ public sealed class TaskPipeline
         var pipelineStopwatch = Stopwatch.StartNew();
         var allResults = new List<TaskExecutionResult>();
 
-        for (var groupIndex = 0; groupIndex < _groups.Count; groupIndex++)
+        for (var stepIndex = 0; stepIndex < _steps.Count; stepIndex++)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var group = _groups[groupIndex];
-            IReadOnlyList<TaskExecutionResult> groupResults;
+            var step = _steps[stepIndex];
+            IReadOnlyList<TaskExecutionResult> stepResults;
 
-            if (group.IsParallel)
+            if (step.TaskGroupValue != null)
             {
-                groupResults = await ExecuteParallelGroupAsync(
-                    group,
+                stepResults = await ExecuteTaskGroupStepAsync(
+                    step.TaskGroupValue,
                     context,
-                    groupIndex,
+                    stepIndex,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            else if (step.BranchValue != null)
+            {
+                stepResults = await ExecuteBranchStepAsync(
+                    step.BranchValue,
+                    context,
+                    stepIndex,
                     cancellationToken).ConfigureAwait(false);
             }
             else
             {
-                var result = await ExecuteTaskAsync(
-                    group.Tasks[0],
-                    context,
-                    groupIndex,
-                    cancellationToken,
-                    cancellationToken).ConfigureAwait(false);
-
-                groupResults = new[] { result };
+                stepResults = Array.Empty<TaskExecutionResult>();
             }
 
-            allResults.AddRange(groupResults);
+            allResults.AddRange(stepResults);
 
-            if (_errorMode == ErrorMode.StopOnFirstError && groupResults.Any(result => !result.Success))
+            if (_errorMode == ErrorMode.StopOnFirstError && stepResults.Any(result => !result.Success))
                 break;
         }
 
         pipelineStopwatch.Stop();
 
         return new TaskPipelineResult(allResults, context, pipelineStopwatch.Elapsed);
+    }
+
+    private TaskPipeline CreateChildPipeline()
+    {
+        return new TaskPipeline
+        {
+            _errorMode = _errorMode,
+            _defaultRetryCount = _defaultRetryCount,
+            _defaultTimeout = _defaultTimeout,
+            _maxDegreeOfParallelism = _maxDegreeOfParallelism
+        };
+    }
+
+    private async Task<IReadOnlyList<TaskExecutionResult>> ExecuteTaskGroupStepAsync(
+        TaskGroup group,
+        TaskContext context,
+        int groupIndex,
+        CancellationToken cancellationToken)
+    {
+        if (group.IsParallel)
+        {
+            return await ExecuteParallelGroupAsync(
+                group,
+                context,
+                groupIndex,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        var result = await ExecuteTaskAsync(
+            group.Tasks[0],
+            context,
+            groupIndex,
+            cancellationToken,
+            cancellationToken).ConfigureAwait(false);
+
+        return new[] { result };
+    }
+
+    private async Task<IReadOnlyList<TaskExecutionResult>> ExecuteBranchStepAsync(
+        BranchStep branch,
+        TaskContext context,
+        int groupIndex,
+        CancellationToken cancellationToken)
+    {
+        bool conditionResult;
+
+        try
+        {
+            conditionResult = await branch.Condition(context, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            return new[]
+            {
+                CreateBranchFailureResult(branch.Name, groupIndex, ex)
+            };
+        }
+
+        var selectedPipeline = conditionResult
+            ? branch.WhenTrue
+            : branch.WhenFalse;
+
+        if (selectedPipeline == null)
+            return Array.Empty<TaskExecutionResult>();
+
+        var branchResult = await selectedPipeline.ExecuteAsync(
+            context,
+            cancellationToken).ConfigureAwait(false);
+
+        return branchResult.TaskResults;
     }
 
     private async Task<IReadOnlyList<TaskExecutionResult>> ExecuteParallelGroupAsync(
@@ -314,6 +439,26 @@ public sealed class TaskPipeline
         };
     }
 
+    private static TaskExecutionResult CreateBranchFailureResult(
+        string branchName,
+        int groupIndex,
+        Exception exception)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        return new TaskExecutionResult
+        {
+            TaskName = branchName,
+            GroupIndex = groupIndex,
+            Attempts = 1,
+            Status = TaskExecutionStatus.Failed,
+            Exception = exception,
+            Duration = TimeSpan.Zero,
+            StartedAt = now,
+            FinishedAt = now
+        };
+    }
+
     private static CancellationTokenSource CreateTimeoutCancellationTokenSource(
         CancellationToken cancellationToken,
         TimeSpan? timeout)
@@ -347,6 +492,52 @@ public sealed class TaskPipeline
         public int? RetryCount { get; }
 
         public TimeSpan? Timeout { get; }
+    }
+
+    private sealed class BranchStep
+    {
+        public BranchStep(
+            string name,
+            Func<TaskContext, CancellationToken, Task<bool>> condition,
+            TaskPipeline whenTrue,
+            TaskPipeline? whenFalse)
+        {
+            Name = name;
+            Condition = condition;
+            WhenTrue = whenTrue;
+            WhenFalse = whenFalse;
+        }
+
+        public string Name { get; }
+
+        public Func<TaskContext, CancellationToken, Task<bool>> Condition { get; }
+
+        public TaskPipeline WhenTrue { get; }
+
+        public TaskPipeline? WhenFalse { get; }
+    }
+
+    private sealed class PipelineStep
+    {
+        private PipelineStep(TaskGroup? taskGroup, BranchStep? branch)
+        {
+            TaskGroupValue = taskGroup;
+            BranchValue = branch;
+        }
+
+        public TaskGroup? TaskGroupValue { get; }
+
+        public BranchStep? BranchValue { get; }
+
+        public static PipelineStep TaskGroup(TaskGroup taskGroup)
+        {
+            return new PipelineStep(taskGroup, null);
+        }
+
+        public static PipelineStep Branch(BranchStep branch)
+        {
+            return new PipelineStep(null, branch);
+        }
     }
 
     private sealed class TaskGroup

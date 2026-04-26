@@ -203,6 +203,139 @@ public sealed class GetCustomerRequest
 }
 ```
 
+## RPC consumer
+
+The consumer must listen to a queue with the same name used in `AddTaskRpc(key)`.
+
+```csharp
+.AddTaskRpc("CustomerRequest")
+```
+
+For this call, the consumer must listen to:
+
+```text
+CustomerRequest
+```
+
+The consumer receives a JSON request, processes it, and publishes a JSON response back to the reply queue sent by the RPC caller.
+
+```csharp
+using System.Text;
+using System.Text.Json;
+using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
+
+var factory = new ConnectionFactory
+{
+    Uri = new Uri(
+        Environment.GetEnvironmentVariable("NET_TASK_PIPELINE_RPC_URI")
+        ?? "amqp://guest:guest@localhost:5672/")
+};
+
+await using var connection = await factory.CreateConnectionAsync();
+await using var channel = await connection.CreateChannelAsync();
+
+const string queueName = "CustomerRequest";
+
+await channel.QueueDeclareAsync(
+    queue: queueName,
+    durable: false,
+    exclusive: false,
+    autoDelete: false,
+    arguments: null);
+
+await channel.BasicQosAsync(
+    prefetchSize: 0,
+    prefetchCount: 1,
+    global: false);
+
+var consumer = new AsyncEventingBasicConsumer(channel);
+
+consumer.ReceivedAsync += async (_, eventArgs) =>
+{
+    string responseJson;
+
+    try
+    {
+        var requestJson = Encoding.UTF8.GetString(eventArgs.Body.ToArray());
+        var request = JsonSerializer.Deserialize<GetCustomerRequest>(requestJson)
+            ?? throw new InvalidOperationException("Invalid request payload.");
+
+        var response = await ProcessCustomerAsync(request);
+        responseJson = JsonSerializer.Serialize(response);
+    }
+    catch (Exception ex)
+    {
+        responseJson = JsonSerializer.Serialize(new
+        {
+            error = true,
+            message = ex.Message
+        });
+    }
+
+    var responseBytes = Encoding.UTF8.GetBytes(responseJson);
+
+    var replyProperties = new BasicProperties
+    {
+        CorrelationId = eventArgs.BasicProperties.CorrelationId,
+        ContentType = "application/json"
+    };
+
+    await channel.BasicPublishAsync(
+        exchange: string.Empty,
+        routingKey: eventArgs.BasicProperties.ReplyTo!,
+        mandatory: false,
+        basicProperties: replyProperties,
+        body: responseBytes);
+
+    await channel.BasicAckAsync(
+        deliveryTag: eventArgs.DeliveryTag,
+        multiple: false);
+};
+
+await channel.BasicConsumeAsync(
+    queue: queueName,
+    autoAck: false,
+    consumer: consumer);
+
+Console.WriteLine($"RPC consumer listening on queue '{queueName}'.");
+Console.WriteLine("Press ENTER to stop.");
+Console.ReadLine();
+
+static Task<GetCustomerResponse> ProcessCustomerAsync(GetCustomerRequest request)
+{
+    return Task.FromResult(new GetCustomerResponse
+    {
+        CustomerId = request.CustomerId,
+        Name = $"Customer {request.CustomerId}"
+    });
+}
+
+public sealed class GetCustomerRequest
+{
+    public int CustomerId { get; set; }
+}
+
+public sealed class GetCustomerResponse
+{
+    public int CustomerId { get; set; }
+
+    public string Name { get; set; } = string.Empty;
+}
+```
+
+The response must preserve the original correlation id.
+
+```csharp
+CorrelationId = eventArgs.BasicProperties.CorrelationId
+```
+
+The response must be published to the reply destination received in the request.
+
+```csharp
+routingKey: eventArgs.BasicProperties.ReplyTo!
+```
+
 ## Fluent context-based branching
 
 Use `AddBranch` when the pipeline needs to choose between multiple flows based on a string value from the shared `TaskContext`.

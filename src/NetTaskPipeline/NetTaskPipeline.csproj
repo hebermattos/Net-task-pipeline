@@ -11,7 +11,7 @@
     <Description>A lightweight async task pipeline for .NET with sequential and parallel execution support.</Description>
     <Authors>Heber Mattos</Authors>
     <Company>Heber Mattos</Company>
-    <PackageTags>task-pipeline;pipeline;async;parallel;workflow;dotnet</PackageTags>
+    <PackageTags>task-pipeline;pipeline;async;parallel;workflow;dotnet;rabbitmq;rpc</PackageTags>
     <PackageProjectUrl>https://github.com/hebermattos/Net-task-pipeline</PackageProjectUrl>
     <RepositoryUrl>https://github.com/hebermattos/Net-task-pipeline</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
@@ -19,6 +19,11 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <Version>0.1.0</Version>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="RabbitMQ.Client" Version="7.2.1" />
+    <PackageReference Include="System.Text.Json" Version="10.0.6" />
+  </ItemGroup>
 
   <ItemGroup>
     <None Include="../../README.md" Pack="true" PackagePath="/" />

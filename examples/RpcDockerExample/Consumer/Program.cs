@@ -8,6 +8,9 @@ Console.WriteLine("RPC Docker example - consumer");
 var connectionUri = Environment.GetEnvironmentVariable("NET_TASK_PIPELINE_RPC_URI")
     ?? "amqp://guest:guest@localhost:5672/";
 
+var readyFilePath = Environment.GetEnvironmentVariable("RPC_CONSUMER_READY_FILE");
+DeleteReadinessFile(readyFilePath);
+
 var factory = new ConnectionFactory
 {
     Uri = new Uri(connectionUri),
@@ -26,6 +29,8 @@ await RegisterRpcHandlerAsync<GetOrderRequest, GetOrderResponse>(
     channel,
     RpcQueues.OrderRequest,
     ProcessOrderAsync);
+
+WriteReadinessFile(readyFilePath);
 
 Console.WriteLine("Consumer ready.");
 Console.WriteLine($"Listening on '{RpcQueues.CustomerRequest}' and '{RpcQueues.OrderRequest}'.");
@@ -111,6 +116,29 @@ static async Task RegisterRpcHandlerAsync<TRequest, TResponse>(
         queue: queueName,
         autoAck: false,
         consumer: consumer);
+}
+
+static void DeleteReadinessFile(string? readyFilePath)
+{
+    if (string.IsNullOrWhiteSpace(readyFilePath))
+        return;
+
+    if (File.Exists(readyFilePath))
+        File.Delete(readyFilePath);
+}
+
+static void WriteReadinessFile(string? readyFilePath)
+{
+    if (string.IsNullOrWhiteSpace(readyFilePath))
+        return;
+
+    var directory = Path.GetDirectoryName(readyFilePath);
+
+    if (!string.IsNullOrWhiteSpace(directory))
+        Directory.CreateDirectory(directory);
+
+    File.WriteAllText(readyFilePath, DateTimeOffset.UtcNow.ToString("O"));
+    Console.WriteLine($"Readiness file created at '{readyFilePath}'.");
 }
 
 static Task<GetCustomerResponse> ProcessCustomerAsync(GetCustomerRequest request)

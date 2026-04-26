@@ -11,7 +11,7 @@ A lightweight async task pipeline for .NET with sequential and parallel executio
 - Sequential task execution
 - Parallel task groups
 - Generic task registration with `AddTask<TTask>()`
-- RPC task execution with `AddTaskRpc(key)`
+- RPC task execution with `AddTaskRpc(key)` and `AddTaskRpc<TRequest, TResponse>(key)`
 - Fluent context-based branching
 - Shared execution context
 - Cancellation support
@@ -20,7 +20,7 @@ A lightweight async task pipeline for .NET with sequential and parallel executio
 - Error handling modes
 - Execution result reporting
 - Maximum degree of parallelism for parallel groups
-- Runnable simple and advanced examples
+- Runnable simple, advanced, and RabbitMQ RPC Docker examples
 
 ## Basic usage
 
@@ -172,7 +172,7 @@ public sealed class AuditTask : ITask
 
 ## RPC task
 
-Use `AddTaskRpc(key)` to send an RPC request from the pipeline. The only parameter is the key used to get the outgoing request object from the shared `TaskContext`.
+Use `AddTaskRpc<TRequest, TResponse>(key)` to send a typed RPC request from the pipeline. The key is used to read the outgoing request object from the shared `TaskContext` and is also used as the RPC endpoint name.
 
 ```csharp
 var context = new TaskContext();
@@ -182,15 +182,25 @@ context.Set("CustomerRequest", new GetCustomerRequest
 });
 
 var result = await new TaskPipeline()
-    .AddTaskRpc("CustomerRequest")
+    .AddTaskRpc<GetCustomerRequest, GetCustomerResponse>("CustomerRequest")
     .ExecuteAsync(context);
 ```
 
 The RPC endpoint name is the same as the key. In the example above, the endpoint name is `CustomerRequest`.
 
-The response is stored automatically using the same key plus `Response`.
+The response is deserialized as `TResponse` and stored automatically using the same key plus `Response`.
 
 ```csharp
+var response = result.Context.Get<GetCustomerResponse>("CustomerRequestResponse");
+```
+
+The non-typed overload `AddTaskRpc(key)` is still available. It reads the request and stores the response as `object`.
+
+```csharp
+var result = await new TaskPipeline()
+    .AddTaskRpc("CustomerRequest")
+    .ExecuteAsync(context);
+
 var response = result.Context.Get<object>("CustomerRequestResponse");
 ```
 
@@ -205,14 +215,21 @@ public sealed class GetCustomerRequest
 {
     public int CustomerId { get; set; }
 }
+
+public sealed class GetCustomerResponse
+{
+    public int CustomerId { get; set; }
+
+    public string Name { get; set; } = string.Empty;
+}
 ```
 
 ## RPC consumer
 
-The consumer must listen to a queue with the same name used in `AddTaskRpc(key)`.
+The consumer must listen to a queue with the same name used in `AddTaskRpc<TRequest, TResponse>(key)`.
 
 ```csharp
-.AddTaskRpc("CustomerRequest")
+.AddTaskRpc<GetCustomerRequest, GetCustomerResponse>("CustomerRequest")
 ```
 
 For this call, the consumer must listen to:
@@ -484,7 +501,7 @@ foreach (var taskResult in result.TaskResults)
 
 ## Runnable examples
 
-The repository includes two executable examples.
+The repository includes three executable examples.
 
 ### Simple example
 
@@ -514,6 +531,21 @@ Covers most pipeline features in a single runnable flow:
 ```bash
 dotnet run --project examples/AdvancedExample/AdvancedExample.csproj
 ```
+
+### RabbitMQ RPC Docker example
+
+Covers typed RPC calls with RabbitMQ using Docker Compose.
+
+```bash
+cd examples/RpcDockerExample
+docker compose up --build
+```
+
+The example runs:
+
+- `rabbitmq`: RabbitMQ broker with management UI
+- `consumer`: RPC worker that listens to `CustomerRequest` and `OrderRequest`
+- `main-app`: pipeline app that sends two typed RPC calls
 
 ## License
 

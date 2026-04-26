@@ -4,23 +4,14 @@ using System.Threading.Tasks;
 
 namespace NetTaskPipeline;
 
-/// <summary>
-/// Provides simplified RPC registration extensions for <see cref="TaskPipeline"/>.
-/// </summary>
-public static class TaskRpcExtensions
+internal static class TaskRpcExtensions
 {
-    /// <summary>
-    /// Gets the default context key used to store the RPC response for a request type.
-    /// </summary>
-    public static string GetResponseKey<TRequest>()
+    internal static string GetResponseKey<TRequest>()
     {
         return $"{typeof(TRequest).Name}Response";
     }
 
-    /// <summary>
-    /// Adds an RPC task using only the request object factory. The endpoint name is inferred from the request type name.
-    /// </summary>
-    public static TaskPipeline AddTaskRpc<TRequest>(
+    internal static TaskPipeline AddTaskRpc<TRequest>(
         this TaskPipeline pipeline,
         Func<TaskContext, TRequest> requestFactory,
         int? retryCount = null,
@@ -37,10 +28,7 @@ public static class TaskRpcExtensions
             name);
     }
 
-    /// <summary>
-    /// Adds an asynchronous RPC task using only the request object factory. The endpoint name is inferred from the request type name.
-    /// </summary>
-    public static TaskPipeline AddTaskRpc<TRequest>(
+    internal static TaskPipeline AddTaskRpc<TRequest>(
         this TaskPipeline pipeline,
         Func<TaskContext, CancellationToken, Task<TRequest>> requestFactory,
         int? retryCount = null,
@@ -66,10 +54,7 @@ public static class TaskRpcExtensions
             name ?? $"RPC {endpointName}");
     }
 
-    /// <summary>
-    /// Adds an RPC task using a simple endpoint name and the default broker connection.
-    /// </summary>
-    public static TaskPipeline AddTaskRpc<TRequest, TResponse>(
+    internal static TaskPipeline AddTaskRpc<TRequest, TResponse>(
         this TaskPipeline pipeline,
         string endpointName,
         Func<TaskContext, TRequest> requestFactory,
@@ -91,10 +76,7 @@ public static class TaskRpcExtensions
             name);
     }
 
-    /// <summary>
-    /// Adds an asynchronous RPC task using a simple endpoint name and the default broker connection.
-    /// </summary>
-    public static TaskPipeline AddTaskRpc<TRequest, TResponse>(
+    internal static TaskPipeline AddTaskRpc<TRequest, TResponse>(
         this TaskPipeline pipeline,
         string endpointName,
         Func<TaskContext, CancellationToken, Task<TRequest>> requestFactory,
@@ -113,10 +95,7 @@ public static class TaskRpcExtensions
             name);
     }
 
-    /// <summary>
-    /// Adds an RPC task using a simple endpoint name and optional RPC settings.
-    /// </summary>
-    public static TaskPipeline AddTaskRpc<TRequest, TResponse>(
+    internal static TaskPipeline AddTaskRpc<TRequest, TResponse>(
         this TaskPipeline pipeline,
         string endpointName,
         Func<TaskContext, TRequest> requestFactory,
@@ -139,10 +118,7 @@ public static class TaskRpcExtensions
             name);
     }
 
-    /// <summary>
-    /// Adds an asynchronous RPC task using a simple endpoint name and optional RPC settings.
-    /// </summary>
-    public static TaskPipeline AddTaskRpc<TRequest, TResponse>(
+    internal static TaskPipeline AddTaskRpc<TRequest, TResponse>(
         this TaskPipeline pipeline,
         string endpointName,
         Func<TaskContext, CancellationToken, Task<TRequest>> requestFactory,

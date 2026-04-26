@@ -17,9 +17,15 @@ services:
       dockerfile: examples/RpcDockerExample/Consumer/Dockerfile
     environment:
       NET_TASK_PIPELINE_RPC_URI: amqp://guest:guest@rabbitmq:5672/
+      RPC_CONSUMER_READY_FILE: /tmp/net-task-pipeline-rpc-consumer-ready
     depends_on:
       rabbitmq:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/net-task-pipeline-rpc-consumer-ready"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
     restart: unless-stopped
 
   main-app:
@@ -32,4 +38,4 @@ services:
       rabbitmq:
         condition: service_healthy
       consumer:
-        condition: service_started
+        condition: service_healthy

@@ -7,7 +7,7 @@ A lightweight async task pipeline for .NET with sequential and parallel executio
 - Sequential task execution
 - Parallel task groups
 - Generic task registration with `AddTask<TTask>()`
-- RPC task execution with `AddTaskRpc<TRequest>()`
+- RPC task execution with `AddTaskRpc(key)`
 - Fluent context-based branching
 - Shared execution context
 - Cancellation support
@@ -101,6 +101,7 @@ public sealed class LoadCustomerTask : ITask
 
         context.Set("CustomerId", 123);
         context.Set("CustomerName", "John Smith");
+        context.Set("CustomerRequest", new GetCustomerRequest { CustomerId = 123 });
         context.Set("CustomerType", "premium");
     }
 }
@@ -167,21 +168,27 @@ public sealed class AuditTask : ITask
 
 ## RPC task
 
-Use `AddTaskRpc<TRequest>()` to send an RPC request from the pipeline. The only thing you need to provide is how to build the outgoing request object.
+Use `AddTaskRpc(key)` to send an RPC request from the pipeline. The only parameter is the key used to get the outgoing request object from the shared `TaskContext`.
 
 ```csharp
 var context = new TaskContext();
-context.Set("CustomerId", 123);
+context.Set("CustomerRequest", new GetCustomerRequest
+{
+    CustomerId = 123
+});
 
 var result = await new TaskPipeline()
-    .AddTaskRpc<GetCustomerRequest>(ctx => new GetCustomerRequest
-    {
-        CustomerId = ctx.Get<int>("CustomerId")
-    })
+    .AddTaskRpc("CustomerRequest")
     .ExecuteAsync(context);
 ```
 
-The RPC endpoint name is inferred from the request type name. In the example above, the endpoint name is `GetCustomerRequest`.
+The RPC endpoint name is the same as the key. In the example above, the endpoint name is `CustomerRequest`.
+
+The response is stored automatically using the same key plus `Response`.
+
+```csharp
+var response = result.Context.Get<object>("CustomerRequestResponse");
+```
 
 By default, the RPC connection is read from the `NET_TASK_PIPELINE_RPC_URI` environment variable. If the variable is not set, the local development connection is used.
 
@@ -194,22 +201,6 @@ public sealed class GetCustomerRequest
 {
     public int CustomerId { get; set; }
 }
-```
-
-For asynchronous request creation, use the overload that receives a `CancellationToken`.
-
-```csharp
-await new TaskPipeline()
-    .AddTaskRpc<GetCustomerRequest>(async (ctx, cancellationToken) =>
-    {
-        await Task.Delay(100, cancellationToken);
-
-        return new GetCustomerRequest
-        {
-            CustomerId = ctx.Get<int>("CustomerId")
-        };
-    })
-    .ExecuteAsync(context);
 ```
 
 ## Fluent context-based branching

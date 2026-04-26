@@ -19,8 +19,8 @@ context.Set(RpcQueues.OrderRequest, new GetOrderRequest
 
 var result = await new TaskPipeline()
     .WithTimeout(TimeSpan.FromSeconds(20))
-    .AddTaskRpc(RpcQueues.CustomerRequest)
-    .AddTaskRpc(RpcQueues.OrderRequest)
+    .AddTaskRpc<GetCustomerRequest, GetCustomerResponse>(RpcQueues.CustomerRequest)
+    .AddTaskRpc<GetOrderRequest, GetOrderResponse>(RpcQueues.OrderRequest)
     .ExecuteAsync(context);
 
 Console.WriteLine($"Pipeline success: {result.Success}");
@@ -44,8 +44,8 @@ if (result.Success)
         WriteIndented = true
     };
 
-    var customerResponse = result.Context.Get<object>($"{RpcQueues.CustomerRequest}Response");
-    var orderResponse = result.Context.Get<object>($"{RpcQueues.OrderRequest}Response");
+    var customerResponse = result.Context.Get<GetCustomerResponse>($"{RpcQueues.CustomerRequest}Response");
+    var orderResponse = result.Context.Get<GetOrderResponse>($"{RpcQueues.OrderRequest}Response");
 
     Console.WriteLine("Customer RPC response:");
     Console.WriteLine(JsonSerializer.Serialize(customerResponse, jsonOptions));
@@ -66,9 +66,29 @@ public sealed class GetCustomerRequest
     public int CustomerId { get; set; }
 }
 
+public sealed class GetCustomerResponse
+{
+    public int CustomerId { get; set; }
+
+    public string Name { get; set; } = string.Empty;
+
+    public string Status { get; set; } = string.Empty;
+}
+
 public sealed class GetOrderRequest
 {
     public int OrderId { get; set; }
 
     public int CustomerId { get; set; }
+}
+
+public sealed class GetOrderResponse
+{
+    public int OrderId { get; set; }
+
+    public int CustomerId { get; set; }
+
+    public decimal Total { get; set; }
+
+    public bool Approved { get; set; }
 }

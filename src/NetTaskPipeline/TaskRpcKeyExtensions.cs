@@ -17,15 +17,33 @@ public static class TaskRpcKeyExtensions
         TimeSpan? timeout = null,
         string? name = null)
     {
+        return pipeline.AddTaskRpc<object, object>(
+            requestKey,
+            retryCount,
+            timeout,
+            name);
+    }
+
+    /// <summary>
+    /// Adds an RPC task using the context key that contains the outgoing request object.
+    /// The response is deserialized as <typeparamref name="TResponse"/> and stored as {requestKey}Response.
+    /// </summary>
+    public static TaskPipeline AddTaskRpc<TRequest, TResponse>(
+        this TaskPipeline pipeline,
+        string requestKey,
+        int? retryCount = null,
+        TimeSpan? timeout = null,
+        string? name = null)
+    {
         if (pipeline == null)
             throw new ArgumentNullException(nameof(pipeline));
 
         if (string.IsNullOrWhiteSpace(requestKey))
             throw new ArgumentException("RPC request key is required.", nameof(requestKey));
 
-        return pipeline.AddTaskRpc<object, object>(
+        return pipeline.AddTaskRpc<TRequest, TResponse>(
             endpointName: requestKey,
-            requestFactory: context => context.Get<object>(requestKey),
+            requestFactory: context => context.Get<TRequest>(requestKey),
             responseKey: $"{requestKey}Response",
             retryCount: retryCount,
             timeout: timeout,

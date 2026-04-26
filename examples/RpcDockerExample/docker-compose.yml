@@ -1,0 +1,35 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: net-task-pipeline-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  consumer:
+    build:
+      context: ../..
+      dockerfile: examples/RpcDockerExample/Consumer/Dockerfile
+    environment:
+      NET_TASK_PIPELINE_RPC_URI: amqp://guest:guest@rabbitmq:5672/
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  main-app:
+    build:
+      context: ../..
+      dockerfile: examples/RpcDockerExample/MainApp/Dockerfile
+    environment:
+      NET_TASK_PIPELINE_RPC_URI: amqp://guest:guest@rabbitmq:5672/
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      consumer:
+        condition: service_started

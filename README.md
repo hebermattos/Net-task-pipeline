@@ -7,7 +7,7 @@ A lightweight async task pipeline for .NET with sequential and parallel executio
 - Sequential task execution
 - Parallel task groups
 - Generic task registration with `AddTask<TTask>()`
-- RabbitMQ RPC task execution with `AddTaskRpc<TRequest, TResponse>()`
+- RPC task execution with `AddTaskRpc<TRequest, TResponse>()`
 - Fluent context-based branching
 - Shared execution context
 - Cancellation support
@@ -165,9 +165,9 @@ public sealed class AuditTask : ITask
 }
 ```
 
-## RabbitMQ RPC task
+## RPC task
 
-Use `AddTaskRpc<TRequest, TResponse>()` to call a RabbitMQ RPC worker from the pipeline. The request is serialized as JSON, published to RabbitMQ, and the response is stored in the shared `TaskContext`.
+Use `AddTaskRpc<TRequest, TResponse>()` to call an RPC endpoint from the pipeline. The request is serialized as JSON and the response is stored in the shared `TaskContext`.
 
 ```csharp
 var context = new TaskContext();
@@ -175,26 +175,44 @@ context.Set("CustomerId", 123);
 
 var result = await new TaskPipeline()
     .AddTaskRpc<GetCustomerRequest, GetCustomerResponse>(
+        endpointName: "customer.get",
         requestFactory: ctx => new GetCustomerRequest
         {
             CustomerId = ctx.Get<int>("CustomerId")
         },
-        configure: options =>
-        {
-            options.ConnectionUri = "amqp://guest:guest@localhost:5672/";
-            options.RoutingKey = "customer.rpc";
-            options.ResponseKey = "CustomerResponse";
-            options.Timeout = TimeSpan.FromSeconds(30);
-        },
+        responseKey: "CustomerResponse",
         retryCount: 2,
         timeout: TimeSpan.FromSeconds(35),
-        name: "Get customer by RPC")
+        name: "Get customer")
     .ExecuteAsync(context);
 
 var customer = result.Context.Get<GetCustomerResponse>("CustomerResponse");
 ```
 
-The RPC worker must reply using the `reply_to` queue and the same `correlation_id` received in the request message.
+By default, the RPC connection is read from the `NET_TASK_PIPELINE_RPC_URI` environment variable. If the variable is not set, the local development connection is used.
+
+```bash
+NET_TASK_PIPELINE_RPC_URI=amqp://guest:guest@localhost:5672/
+```
+
+You can override the connection and timeout for a specific RPC task only when needed.
+
+```csharp
+await new TaskPipeline()
+    .AddTaskRpc<GetCustomerRequest, GetCustomerResponse>(
+        endpointName: "customer.get",
+        requestFactory: ctx => new GetCustomerRequest
+        {
+            CustomerId = ctx.Get<int>("CustomerId")
+        },
+        responseKey: "CustomerResponse",
+        configure: options =>
+        {
+            options.ConnectionUri = "amqp://guest:guest@localhost:5672/";
+            options.Timeout = TimeSpan.FromSeconds(30);
+        })
+    .ExecuteAsync(context);
+```
 
 ```csharp
 public sealed class GetCustomerRequest
@@ -214,6 +232,7 @@ For asynchronous request creation, use the overload that receives a `Cancellatio
 ```csharp
 await new TaskPipeline()
     .AddTaskRpc<GetCustomerRequest, GetCustomerResponse>(
+        endpointName: "customer.get",
         requestFactory: async (ctx, cancellationToken) =>
         {
             await Task.Delay(100, cancellationToken);
@@ -223,12 +242,7 @@ await new TaskPipeline()
                 CustomerId = ctx.Get<int>("CustomerId")
             };
         },
-        configure: options =>
-        {
-            options.ConnectionUri = "amqp://guest:guest@localhost:5672/";
-            options.RoutingKey = "customer.rpc";
-            options.ResponseKey = "CustomerResponse";
-        })
+        responseKey: "CustomerResponse")
     .ExecuteAsync(context);
 ```
 

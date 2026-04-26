@@ -110,6 +110,278 @@ Tasks are resolved using:
 ActivatorUtilities.GetServiceOrCreateInstance<TTask>(serviceProvider)
 ```
 
+## Shared context
+
+Every pipeline execution uses a `TaskContext`. The same context instance is passed to each task, so values written by one task can be read by later tasks, branch selectors, and RPC tasks.
+
+When `ExecuteAsync()` is called without arguments, the pipeline creates a new empty context. When the caller needs to provide initial data, create a `TaskContext` and pass it to `ExecuteAsync(context)`.
+
+```csharp
+var context = new TaskContext();
+context.Set("CorrelationId", Guid.NewGuid().ToString("N"));
+context.Set("RequestedBy", "system");
+
+var result = await new TaskPipeline()
+    .AddTask<LoadCustomerTask>()
+    .AddTask<SendCustomerEmailTask>()
+    .ExecuteAsync(context);
+```
+
+The final context is available through the pipeline result:
+
+```csharp
+var correlationId = result.Context.Get<string>("CorrelationId");
+```
+
 ## Adding values to the shared context
 
-...
+Use `context.Set(key, value)` inside any task to add or replace a value in the shared pipeline context.
+
+```csharp
+using NetTaskPipeline;
+
+public sealed class LoadCustomerTask : ITask
+{
+    public async Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
+    {
+        await Task.Delay(500, cancellationToken);
+
+        context.Set("CustomerId", 123);
+        context.Set("CustomerName", "John Smith");
+        context.Set("CustomerRequest", new GetCustomerRequest { CustomerId = 123 });
+        context.Set("CustomerType", "premium");
+    }
+}
+```
+
+A later task can read the values written by `LoadCustomerTask`:
+
+```csharp
+await new TaskPipeline()
+    .AddTask<LoadCustomerTask>()
+    .AddTask<SendCustomerEmailTask>()
+    .ExecuteAsync();
+```
+
+## Reading values from the shared context
+
+Use `context.Get<T>(key)` when a value is required. It returns the value using the expected type and throws if the key is missing or if the stored value is not compatible with `T`.
+
+```csharp
+using NetTaskPipeline;
+
+public sealed class SendCustomerEmailTask : ITask
+{
+    public async Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
+    {
+        var customerId = context.Get<int>("CustomerId");
+        var customerName = context.Get<string>("CustomerName");
+
+        await Task.Delay(1000, cancellationToken);
+
+        Console.WriteLine($"Email sent for customer {customerId} - {customerName}.");
+    }
+}
+```
+
+Use `context.TryGet<T>(key, out var value)` when the value is optional.
+
+```csharp
+public sealed class AuditTask : ITask
+{
+    public Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
+    {
+        if (context.TryGet<string>("CorrelationId", out var correlationId))
+        {
+            Console.WriteLine($"Correlation ID: {correlationId}");
+        }
+
+        return Task.CompletedTask;
+    }
+}
+```
+
+## Context usage with branching
+
+`AddBranch` can choose the next flow from a value stored in `TaskContext`.
+
+```csharp
+var context = new TaskContext();
+context.Set("CustomerType", "premium");
+
+var result = await new TaskPipeline()
+    .AddBranch(
+        ctx => ctx.Get<string>("CustomerType"),
+        branch => branch
+            .When<ApplyPremiumDiscountTask, SendPremiumEmailTask>("premium")
+            .When<ApplyStandardDiscountTask, SendStandardEmailTask>("standard")
+            .When<BlockOrderTask>("blocked")
+            .Default<ReviewCustomerManuallyTask>(),
+        name: "Customer type decision")
+    .AddTask<SaveOrderTask>()
+    .ExecuteAsync(context);
+```
+
+The branch selector can also be asynchronous.
+
+```csharp
+await new TaskPipeline()
+    .AddBranch(
+        async (ctx, cancellationToken) =>
+        {
+            await Task.Delay(100, cancellationToken);
+
+            return ctx.Get<decimal>("Total") >= 1000m
+                ? "high-value"
+                : "low-value";
+        },
+        branch => branch
+            .When<RequireManagerApprovalTask>("high-value")
+            .When<AutoApproveTask>("low-value"),
+        name: "Approval decision")
+    .ExecuteAsync(context);
+```
+
+## Context usage with RPC tasks
+
+Use `AddTaskRpc<TRequest, TResponse>(key)` when the pipeline needs to send a typed RPC request. The `key` is used to read the request object from `TaskContext` and is also used as the RPC endpoint name.
+
+```csharp
+var context = new TaskContext();
+context.Set("CustomerRequest", new GetCustomerRequest
+{
+    CustomerId = 123
+});
+
+var result = await new TaskPipeline()
+    .AddTaskRpc<GetCustomerRequest, GetCustomerResponse>("CustomerRequest")
+    .ExecuteAsync(context);
+```
+
+The response is deserialized as `TResponse` and stored automatically using the same key plus `Response`.
+
+```csharp
+var response = result.Context.Get<GetCustomerResponse>("CustomerRequestResponse");
+```
+
+By default, the RPC connection is read from the `NET_TASK_PIPELINE_RPC_URI` environment variable. If the variable is not set, the local development connection is used.
+
+```bash
+NET_TASK_PIPELINE_RPC_URI=amqp://guest:guest@localhost:5672/
+```
+
+```csharp
+public sealed class GetCustomerRequest
+{
+    public int CustomerId { get; set; }
+}
+
+public sealed class GetCustomerResponse
+{
+    public int CustomerId { get; set; }
+
+    public string Name { get; set; } = string.Empty;
+}
+```
+
+## Execution model
+
+Each `AddTask` call creates one execution group.
+
+```csharp
+await new TaskPipeline()
+    .AddTask<FirstTask>()
+    .AddParallel<SecondTask, ThirdTask>()
+    .AddTask<FourthTask>()
+    .ExecuteAsync();
+```
+
+Execution order:
+
+```text
+FirstTask
+  ↓
+SecondTask + ThirdTask in parallel
+  ↓
+FourthTask
+```
+
+## Error handling
+
+```csharp
+await new TaskPipeline()
+    .OnError(ErrorMode.ContinueOnError)
+    .AddTask<FirstTask>()
+    .AddTask<SecondTask>()
+    .ExecuteAsync();
+```
+
+Available modes:
+
+- `StopOnFirstError`
+- `ContinueOnError`
+
+## Retry
+
+```csharp
+await new TaskPipeline()
+    .WithRetry(3)
+    .AddTask<CallExternalApiTask>()
+    .ExecuteAsync();
+```
+
+Per-task retry:
+
+```csharp
+await new TaskPipeline()
+    .AddTask<CallExternalApiTask>(retryCount: 3)
+    .ExecuteAsync();
+```
+
+## Timeout
+
+```csharp
+await new TaskPipeline()
+    .WithTimeout(TimeSpan.FromSeconds(30))
+    .AddTask<LongRunningTask>()
+    .ExecuteAsync();
+```
+
+Per-task timeout:
+
+```csharp
+await new TaskPipeline()
+    .AddTask<LongRunningTask>(timeout: TimeSpan.FromSeconds(5))
+    .ExecuteAsync();
+```
+
+## Results
+
+```csharp
+TaskPipelineResult result = await pipeline.ExecuteAsync();
+
+foreach (var taskResult in result.TaskResults)
+{
+    Console.WriteLine($"{taskResult.TaskName}: {taskResult.Status} in {taskResult.Duration}");
+}
+```
+
+## Runnable examples
+
+The repository includes runnable examples.
+
+```bash
+dotnet run --project examples/SimpleExample/SimpleExample.csproj
+dotnet run --project examples/AdvancedExample/AdvancedExample.csproj
+```
+
+The RabbitMQ RPC Docker example can be started with Docker Compose:
+
+```bash
+cd examples/RpcDockerExample
+docker compose up --build
+```
+
+## License
+
+MIT

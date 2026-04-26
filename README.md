@@ -7,7 +7,7 @@ A lightweight async task pipeline for .NET with sequential and parallel executio
 - Sequential task execution
 - Parallel task groups
 - Generic task registration with `AddTask<TTask>()`
-- RPC task execution with `AddTaskRpc<TRequest, TResponse>()`
+- RPC task execution with `AddTaskRpc<TRequest>()`
 - Fluent context-based branching
 - Shared execution context
 - Cancellation support
@@ -167,27 +167,21 @@ public sealed class AuditTask : ITask
 
 ## RPC task
 
-Use `AddTaskRpc<TRequest, TResponse>()` to call an RPC endpoint from the pipeline. The request is serialized as JSON and the response is stored in the shared `TaskContext`.
+Use `AddTaskRpc<TRequest>()` to send an RPC request from the pipeline. The only thing you need to provide is how to build the outgoing request object.
 
 ```csharp
 var context = new TaskContext();
 context.Set("CustomerId", 123);
 
 var result = await new TaskPipeline()
-    .AddTaskRpc<GetCustomerRequest, GetCustomerResponse>(
-        endpointName: "customer.get",
-        requestFactory: ctx => new GetCustomerRequest
-        {
-            CustomerId = ctx.Get<int>("CustomerId")
-        },
-        responseKey: "CustomerResponse",
-        retryCount: 2,
-        timeout: TimeSpan.FromSeconds(35),
-        name: "Get customer")
+    .AddTaskRpc<GetCustomerRequest>(ctx => new GetCustomerRequest
+    {
+        CustomerId = ctx.Get<int>("CustomerId")
+    })
     .ExecuteAsync(context);
-
-var customer = result.Context.Get<GetCustomerResponse>("CustomerResponse");
 ```
+
+The RPC endpoint name is inferred from the request type name. In the example above, the endpoint name is `GetCustomerRequest`.
 
 By default, the RPC connection is read from the `NET_TASK_PIPELINE_RPC_URI` environment variable. If the variable is not set, the local development connection is used.
 
@@ -195,35 +189,10 @@ By default, the RPC connection is read from the `NET_TASK_PIPELINE_RPC_URI` envi
 NET_TASK_PIPELINE_RPC_URI=amqp://guest:guest@localhost:5672/
 ```
 
-You can override the connection and timeout for a specific RPC task only when needed.
-
-```csharp
-await new TaskPipeline()
-    .AddTaskRpc<GetCustomerRequest, GetCustomerResponse>(
-        endpointName: "customer.get",
-        requestFactory: ctx => new GetCustomerRequest
-        {
-            CustomerId = ctx.Get<int>("CustomerId")
-        },
-        responseKey: "CustomerResponse",
-        configure: options =>
-        {
-            options.ConnectionUri = "amqp://guest:guest@localhost:5672/";
-            options.Timeout = TimeSpan.FromSeconds(30);
-        })
-    .ExecuteAsync(context);
-```
-
 ```csharp
 public sealed class GetCustomerRequest
 {
     public int CustomerId { get; set; }
-}
-
-public sealed class GetCustomerResponse
-{
-    public int CustomerId { get; set; }
-    public string Name { get; set; } = string.Empty;
 }
 ```
 
@@ -231,18 +200,15 @@ For asynchronous request creation, use the overload that receives a `Cancellatio
 
 ```csharp
 await new TaskPipeline()
-    .AddTaskRpc<GetCustomerRequest, GetCustomerResponse>(
-        endpointName: "customer.get",
-        requestFactory: async (ctx, cancellationToken) =>
-        {
-            await Task.Delay(100, cancellationToken);
+    .AddTaskRpc<GetCustomerRequest>(async (ctx, cancellationToken) =>
+    {
+        await Task.Delay(100, cancellationToken);
 
-            return new GetCustomerRequest
-            {
-                CustomerId = ctx.Get<int>("CustomerId")
-            };
-        },
-        responseKey: "CustomerResponse")
+        return new GetCustomerRequest
+        {
+            CustomerId = ctx.Get<int>("CustomerId")
+        };
+    })
     .ExecuteAsync(context);
 ```
 

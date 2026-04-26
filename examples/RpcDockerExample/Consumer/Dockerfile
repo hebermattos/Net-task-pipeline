@@ -9,8 +9,7 @@ COPY examples/RpcDockerExample/Consumer/ examples/RpcDockerExample/Consumer/
 
 RUN dotnet publish examples/RpcDockerExample/Consumer/Consumer.csproj \
     --configuration Release \
-    --output /app/publish \
-    --no-restore
+    --output /app/publish
 
 FROM mcr.microsoft.com/dotnet/runtime:8.0 AS final
 WORKDIR /app

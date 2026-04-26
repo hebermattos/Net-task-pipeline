@@ -11,8 +11,7 @@ COPY examples/RpcDockerExample/MainApp/ examples/RpcDockerExample/MainApp/
 
 RUN dotnet publish examples/RpcDockerExample/MainApp/MainApp.csproj \
     --configuration Release \
-    --output /app/publish \
-    --no-restore
+    --output /app/publish
 
 FROM mcr.microsoft.com/dotnet/runtime:8.0 AS final
 WORKDIR /app

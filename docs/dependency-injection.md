@@ -4,6 +4,8 @@
 
 This is useful when a task needs services from a .NET application, such as repositories, API clients, loggers, configuration objects, or domain services.
 
+The library uses `Microsoft.Extensions.DependencyInjection` and `ActivatorUtilities.GetServiceOrCreateInstance<TTask>()` to resolve tasks.
+
 ## Basic idea
 
 Instead of creating the task manually, pass an `IServiceProvider` to the typed task registration overload:
@@ -83,7 +85,7 @@ The task type itself can be registered:
 services.AddTransient<LoadCustomerTask>();
 ```
 
-But the resolver can also create the task if all constructor parameters are registered.
+But `ActivatorUtilities.GetServiceOrCreateInstance<TTask>()` can also create the task if all constructor parameters are registered.
 
 For example, this can work:
 
@@ -146,12 +148,18 @@ var result = await new TaskPipeline()
 
 ## Resolution behavior
 
-When `AddTask<TTask>(serviceProvider)` is used, task creation follows this order:
+When `AddTask<TTask>(serviceProvider)` is used, task creation is delegated to:
 
-1. Try to resolve `TTask` directly from `serviceProvider.GetService(typeof(TTask))`.
-2. If the task is not registered, inspect public constructors.
-3. Use the constructor where all parameters can be resolved from the service provider.
-4. Throw an exception if no valid constructor can be used.
+```csharp
+ActivatorUtilities.GetServiceOrCreateInstance<TTask>(serviceProvider)
+```
+
+This means:
+
+1. If `TTask` is registered in the container, the registered service is used.
+2. If `TTask` is not registered, `ActivatorUtilities` tries to instantiate it.
+3. Constructor parameters are resolved from the service provider.
+4. An exception is thrown if required dependencies cannot be resolved.
 
 ## Current overloads
 

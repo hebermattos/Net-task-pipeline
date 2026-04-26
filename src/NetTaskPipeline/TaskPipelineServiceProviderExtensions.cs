@@ -1,5 +1,5 @@
 using System;
-using System.Linq;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace NetTaskPipeline;
 
@@ -20,7 +20,7 @@ public static class TaskPipelineServiceProviderExtensions
             throw new ArgumentNullException(nameof(serviceProvider));
 
         return pipeline.AddTask(
-            CreateTask<TTask>(serviceProvider),
+            ActivatorUtilities.GetServiceOrCreateInstance<TTask>(serviceProvider),
             retryCount,
             timeout,
             name ?? typeof(TTask).Name);
@@ -43,45 +43,10 @@ public static class TaskPipelineServiceProviderExtensions
         return pipeline.AddParallel(
             new ITask[]
             {
-                CreateTask<TTask1>(serviceProvider),
-                CreateTask<TTask2>(serviceProvider)
+                ActivatorUtilities.GetServiceOrCreateInstance<TTask1>(serviceProvider),
+                ActivatorUtilities.GetServiceOrCreateInstance<TTask2>(serviceProvider)
             },
             retryCount,
             timeout);
-    }
-
-    private static TTask CreateTask<TTask>(IServiceProvider serviceProvider)
-        where TTask : ITask
-    {
-        var taskType = typeof(TTask);
-        var registeredTask = serviceProvider.GetService(taskType);
-
-        if (registeredTask != null)
-            return (TTask)registeredTask;
-
-        foreach (var constructor in taskType.GetConstructors().OrderByDescending(ctor => ctor.GetParameters().Length))
-        {
-            var parameters = constructor.GetParameters();
-            var arguments = new object?[parameters.Length];
-            var canUseConstructor = true;
-
-            for (var index = 0; index < parameters.Length; index++)
-            {
-                var service = serviceProvider.GetService(parameters[index].ParameterType);
-
-                if (service == null)
-                {
-                    canUseConstructor = false;
-                    break;
-                }
-
-                arguments[index] = service;
-            }
-
-            if (canUseConstructor)
-                return (TTask)constructor.Invoke(arguments);
-        }
-
-        throw new InvalidOperationException($"Unable to create task '{taskType.FullName}'.");
     }
 }

@@ -320,6 +320,249 @@ public sealed class TaskPipelineTests
         Assert.IsType<InvalidOperationException>(taskResult.Exception);
     }
 
+    [Fact]
+    public void WithRetry_WithNegativeRetryCount_ThrowsArgumentOutOfRangeException()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new TaskPipeline().WithRetry(-1));
+    }
+
+    [Fact]
+    public void WithTimeout_WithZeroTimeout_ThrowsArgumentOutOfRangeException()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new TaskPipeline().WithTimeout(TimeSpan.Zero));
+    }
+
+    [Fact]
+    public void WithTimeout_WithNegativeTimeout_ThrowsArgumentOutOfRangeException()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new TaskPipeline().WithTimeout(TimeSpan.FromMilliseconds(-1)));
+    }
+
+    [Fact]
+    public void WithMaxDegreeOfParallelism_WithZeroValue_ThrowsArgumentOutOfRangeException()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new TaskPipeline().WithMaxDegreeOfParallelism(0));
+    }
+
+    [Fact]
+    public void WithMaxDegreeOfParallelism_WithNegativeValue_ThrowsArgumentOutOfRangeException()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new TaskPipeline().WithMaxDegreeOfParallelism(-1));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithNullContext_ThrowsArgumentNullException()
+    {
+        var pipeline = new TaskPipeline();
+
+        await Assert.ThrowsAsync<ArgumentNullException>(() => pipeline.ExecuteAsync(null!));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithCanceledToken_ThrowsOperationCanceledException()
+    {
+        using var cancellationTokenSource = new CancellationTokenSource();
+        cancellationTokenSource.Cancel();
+
+        var pipeline = new TaskPipeline()
+            .AddTask(new DelegateTask("Should not run", _ => Task.CompletedTask));
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            pipeline.ExecuteAsync(cancellationTokenSource.Token));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithDefaultRetry_RetriesFailedTask()
+    {
+        var attempts = 0;
+
+        var result = await new TaskPipeline()
+            .WithRetry(2)
+            .AddTask(new DelegateTask("Unstable", _ =>
+            {
+                attempts++;
+
+                if (attempts < 3)
+                    throw new InvalidOperationException("Temporary failure.");
+
+                return Task.CompletedTask;
+            }))
+            .ExecuteAsync();
+
+        var taskResult = Assert.Single(result.TaskResults);
+
+        Assert.True(result.Success);
+        Assert.Equal(3, attempts);
+        Assert.Equal(3, taskResult.Attempts);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithDefaultTimeout_AppliesTimeoutToTask()
+    {
+        var result = await new TaskPipeline()
+            .WithTimeout(TimeSpan.FromMilliseconds(100))
+            .AddTask(new DelayTask("Slow task", TimeSpan.FromSeconds(3)))
+            .ExecuteAsync();
+
+        var taskResult = Assert.Single(result.TaskResults);
+
+        Assert.False(result.Success);
+        Assert.Equal(TaskExecutionStatus.Failed, taskResult.Status);
+        Assert.IsType<TimeoutException>(taskResult.Exception);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithFalseBranchAndNoFalseFlow_ReturnsNoTaskResults()
+    {
+        var context = new TaskContext();
+        context.Set("RunTrueFlow", false);
+
+        var result = await new TaskPipeline()
+            .AddBranch(
+                ctx => ctx.Get<bool>("RunTrueFlow"),
+                whenTrue: branch => branch.AddTask(new DelegateTask("True flow", ctx =>
+                {
+                    ctx.Set("Executed", true);
+                    return Task.CompletedTask;
+                })),
+                name: "Optional decision")
+            .ExecuteAsync(context);
+
+        Assert.True(result.Success);
+        Assert.Empty(result.TaskResults);
+        Assert.False(result.Context.TryGet<bool>("Executed", out _));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithBranch_InheritsRetryConfiguration()
+    {
+        var attempts = 0;
+
+        var result = await new TaskPipeline()
+            .WithRetry(1)
+            .AddBranch(
+                _ => true,
+                whenTrue: branch => branch.AddTask(new DelegateTask("Retry inherited", _ =>
+                {
+                    attempts++;
+
+                    if (attempts < 2)
+                        throw new InvalidOperationException("Temporary failure.");
+
+                    return Task.CompletedTask;
+                })),
+                name: "Retry branch")
+            .ExecuteAsync();
+
+        var taskResult = Assert.Single(result.TaskResults);
+
+        Assert.True(result.Success);
+        Assert.Equal(2, attempts);
+        Assert.Equal(2, taskResult.Attempts);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithBranch_InheritsTimeoutConfiguration()
+    {
+        var result = await new TaskPipeline()
+            .WithTimeout(TimeSpan.FromMilliseconds(100))
+            .AddBranch(
+                _ => true,
+                whenTrue: branch => branch.AddTask(new DelayTask("Slow branch task", TimeSpan.FromSeconds(3))),
+                name: "Timeout branch")
+            .ExecuteAsync();
+
+        var taskResult = Assert.Single(result.TaskResults);
+
+        Assert.False(result.Success);
+        Assert.Equal(TaskExecutionStatus.Failed, taskResult.Status);
+        Assert.IsType<TimeoutException>(taskResult.Exception);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void TaskContext_Set_WithInvalidKey_ThrowsArgumentException(string? key)
+    {
+        var context = new TaskContext();
+
+        Assert.Throws<ArgumentException>(() => context.Set(key!, 123));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void TaskContext_Get_WithInvalidKey_ThrowsArgumentException(string? key)
+    {
+        var context = new TaskContext();
+
+        Assert.Throws<ArgumentException>(() => context.Get<int>(key!));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void TaskContext_TryGet_WithInvalidKey_ThrowsArgumentException(string? key)
+    {
+        var context = new TaskContext();
+
+        Assert.Throws<ArgumentException>(() => context.TryGet<int>(key!, out _));
+    }
+
+    [Fact]
+    public void TaskContext_Get_WithMissingKey_ThrowsKeyNotFoundException()
+    {
+        var context = new TaskContext();
+
+        Assert.Throws<KeyNotFoundException>(() => context.Get<int>("Missing"));
+    }
+
+    [Fact]
+    public void TaskContext_Get_WithWrongType_ThrowsInvalidCastException()
+    {
+        var context = new TaskContext();
+        context.Set("Value", "123");
+
+        Assert.Throws<InvalidCastException>(() => context.Get<int>("Value"));
+    }
+
+    [Fact]
+    public void TaskContext_TryGet_WithMissingKey_ReturnsFalseAndDefaultValue()
+    {
+        var context = new TaskContext();
+
+        var found = context.TryGet<int>("Missing", out var value);
+
+        Assert.False(found);
+        Assert.Equal(default, value);
+    }
+
+    [Fact]
+    public void TaskContext_TryGet_WithWrongType_ReturnsFalseAndDefaultValue()
+    {
+        var context = new TaskContext();
+        context.Set("Value", "123");
+
+        var found = context.TryGet<int>("Value", out var value);
+
+        Assert.False(found);
+        Assert.Equal(default, value);
+    }
+
+    [Fact]
+    public void TaskContext_Set_WithExistingKey_ReplacesValue()
+    {
+        var context = new TaskContext();
+        context.Set("Value", 1);
+
+        context.Set("Value", 2);
+
+        Assert.Equal(2, context.Get<int>("Value"));
+    }
+
     private static void UpdateMax(ref int target, int value)
     {
         int initialValue;

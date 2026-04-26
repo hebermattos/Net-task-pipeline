@@ -11,7 +11,7 @@ A lightweight async task pipeline for .NET with sequential and parallel executio
 - Sequential task execution
 - Parallel task groups
 - Generic task registration with `AddTask<TTask>()`
-- RPC task execution with `AddTaskRpc(key)` and `AddTaskRpc<TRequest, TResponse>(key)`
+- RPC task execution with `AddTaskRpc<TRequest, TResponse>(key)`
 - Fluent context-based branching
 - Shared execution context
 - Cancellation support
@@ -192,16 +192,6 @@ The response is deserialized as `TResponse` and stored automatically using the s
 
 ```csharp
 var response = result.Context.Get<GetCustomerResponse>("CustomerRequestResponse");
-```
-
-The non-typed overload `AddTaskRpc(key)` is still available. It reads the request and stores the response as `object`.
-
-```csharp
-var result = await new TaskPipeline()
-    .AddTaskRpc("CustomerRequest")
-    .ExecuteAsync(context);
-
-var response = result.Context.Get<object>("CustomerRequestResponse");
 ```
 
 By default, the RPC connection is read from the `NET_TASK_PIPELINE_RPC_URI` environment variable. If the variable is not set, the local development connection is used.

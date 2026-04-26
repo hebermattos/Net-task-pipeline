@@ -8,23 +8,6 @@ namespace NetTaskPipeline;
 public static class TaskRpcKeyExtensions
 {
     /// <summary>
-    /// Adds an RPC task using only the context key that contains the outgoing request object.
-    /// </summary>
-    public static TaskPipeline AddTaskRpc(
-        this TaskPipeline pipeline,
-        string requestKey,
-        int? retryCount = null,
-        TimeSpan? timeout = null,
-        string? name = null)
-    {
-        return pipeline.AddTaskRpc<object, object>(
-            requestKey,
-            retryCount,
-            timeout,
-            name);
-    }
-
-    /// <summary>
     /// Adds an RPC task using the context key that contains the outgoing request object.
     /// The response is deserialized as <typeparamref name="TResponse"/> and stored as {requestKey}Response.
     /// </summary>

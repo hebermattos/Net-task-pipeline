@@ -7,6 +7,7 @@ A lightweight async task pipeline for .NET with sequential and parallel executio
 - Sequential task execution
 - Parallel task groups
 - Generic task registration with `AddTask<TTask>()`
+- RabbitMQ RPC task execution with `AddTaskRpc<TRequest, TResponse>()`
 - Fluent context-based branching
 - Shared execution context
 - Cancellation support
@@ -162,6 +163,73 @@ public sealed class AuditTask : ITask
         return Task.CompletedTask;
     }
 }
+```
+
+## RabbitMQ RPC task
+
+Use `AddTaskRpc<TRequest, TResponse>()` to call a RabbitMQ RPC worker from the pipeline. The request is serialized as JSON, published to RabbitMQ, and the response is stored in the shared `TaskContext`.
+
+```csharp
+var context = new TaskContext();
+context.Set("CustomerId", 123);
+
+var result = await new TaskPipeline()
+    .AddTaskRpc<GetCustomerRequest, GetCustomerResponse>(
+        requestFactory: ctx => new GetCustomerRequest
+        {
+            CustomerId = ctx.Get<int>("CustomerId")
+        },
+        configure: options =>
+        {
+            options.ConnectionUri = "amqp://guest:guest@localhost:5672/";
+            options.RoutingKey = "customer.rpc";
+            options.ResponseKey = "CustomerResponse";
+            options.Timeout = TimeSpan.FromSeconds(30);
+        },
+        retryCount: 2,
+        timeout: TimeSpan.FromSeconds(35),
+        name: "Get customer by RPC")
+    .ExecuteAsync(context);
+
+var customer = result.Context.Get<GetCustomerResponse>("CustomerResponse");
+```
+
+The RPC worker must reply using the `reply_to` queue and the same `correlation_id` received in the request message.
+
+```csharp
+public sealed class GetCustomerRequest
+{
+    public int CustomerId { get; set; }
+}
+
+public sealed class GetCustomerResponse
+{
+    public int CustomerId { get; set; }
+    public string Name { get; set; } = string.Empty;
+}
+```
+
+For asynchronous request creation, use the overload that receives a `CancellationToken`.
+
+```csharp
+await new TaskPipeline()
+    .AddTaskRpc<GetCustomerRequest, GetCustomerResponse>(
+        requestFactory: async (ctx, cancellationToken) =>
+        {
+            await Task.Delay(100, cancellationToken);
+
+            return new GetCustomerRequest
+            {
+                CustomerId = ctx.Get<int>("CustomerId")
+            };
+        },
+        configure: options =>
+        {
+            options.ConnectionUri = "amqp://guest:guest@localhost:5672/";
+            options.RoutingKey = "customer.rpc";
+            options.ResponseKey = "CustomerResponse";
+        })
+    .ExecuteAsync(context);
 ```
 
 ## Fluent context-based branching

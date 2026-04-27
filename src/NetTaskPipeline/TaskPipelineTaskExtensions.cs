@@ -15,13 +15,13 @@ public static class TaskPipelineTaskExtensions
         int? retryCount = null,
         TimeSpan? timeout = null,
         string? name = null)
-        where TTask : ITask, new()
+        where TTask : ITask
     {
         if (pipeline == null)
             throw new ArgumentNullException(nameof(pipeline));
 
         return pipeline.AddTask(
-            new TTask(),
+            pipeline.CreateTask<TTask>(),
             retryCount,
             timeout,
             name ?? typeof(TTask).Name);
@@ -34,8 +34,8 @@ public static class TaskPipelineTaskExtensions
         this TaskPipeline pipeline,
         int? retryCount = null,
         TimeSpan? timeout = null)
-        where TTask1 : ITask, new()
-        where TTask2 : ITask, new()
+        where TTask1 : ITask
+        where TTask2 : ITask
     {
         if (pipeline == null)
             throw new ArgumentNullException(nameof(pipeline));
@@ -43,8 +43,8 @@ public static class TaskPipelineTaskExtensions
         return pipeline.AddParallel(
             new ITask[]
             {
-                new TTask1(),
-                new TTask2()
+                pipeline.CreateTask<TTask1>(),
+                pipeline.CreateTask<TTask2>()
             },
             retryCount,
             timeout);
@@ -57,9 +57,9 @@ public static class TaskPipelineTaskExtensions
         this TaskPipeline pipeline,
         int? retryCount = null,
         TimeSpan? timeout = null)
-        where TTask1 : ITask, new()
-        where TTask2 : ITask, new()
-        where TTask3 : ITask, new()
+        where TTask1 : ITask
+        where TTask2 : ITask
+        where TTask3 : ITask
     {
         if (pipeline == null)
             throw new ArgumentNullException(nameof(pipeline));
@@ -67,9 +67,9 @@ public static class TaskPipelineTaskExtensions
         return pipeline.AddParallel(
             new ITask[]
             {
-                new TTask1(),
-                new TTask2(),
-                new TTask3()
+                pipeline.CreateTask<TTask1>(),
+                pipeline.CreateTask<TTask2>(),
+                pipeline.CreateTask<TTask3>()
             },
             retryCount,
             timeout);
@@ -82,10 +82,10 @@ public static class TaskPipelineTaskExtensions
         this TaskPipeline pipeline,
         int? retryCount = null,
         TimeSpan? timeout = null)
-        where TTask1 : ITask, new()
-        where TTask2 : ITask, new()
-        where TTask3 : ITask, new()
-        where TTask4 : ITask, new()
+        where TTask1 : ITask
+        where TTask2 : ITask
+        where TTask3 : ITask
+        where TTask4 : ITask
     {
         if (pipeline == null)
             throw new ArgumentNullException(nameof(pipeline));
@@ -93,10 +93,10 @@ public static class TaskPipelineTaskExtensions
         return pipeline.AddParallel(
             new ITask[]
             {
-                new TTask1(),
-                new TTask2(),
-                new TTask3(),
-                new TTask4()
+                pipeline.CreateTask<TTask1>(),
+                pipeline.CreateTask<TTask2>(),
+                pipeline.CreateTask<TTask3>(),
+                pipeline.CreateTask<TTask4>()
             },
             retryCount,
             timeout);

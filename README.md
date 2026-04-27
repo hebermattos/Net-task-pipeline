@@ -13,6 +13,7 @@ A lightweight async task pipeline for .NET with sequential and parallel executio
 - Sequential task execution
 - Parallel task groups
 - Generic task registration with `AddTask<TTask>()`
+- Inline task registration with delegate-based `AddTask(...)` overloads
 - RPC task execution with `AddTaskRpc<TRequest, TResponse>(key)`
 - Fluent context-based branching
 - Shared execution context
@@ -79,6 +80,55 @@ await new TaskPipeline()
 ```
 
 Generic task registration requires a public parameterless constructor when NOT using dependency injection.
+
+## Inline task registration
+
+Use the delegate-based `AddTask(...)` overloads when you need a small task without creating a dedicated `ITask` class.
+
+```csharp
+var result = await new TaskPipeline()
+    .AddTask("Set customer", context =>
+    {
+        context.Set("CustomerId", 123);
+        return Task.CompletedTask;
+    })
+    .AddTask("Send notification", async (context, cancellationToken) =>
+    {
+        var customerId = context.Get<int>("CustomerId");
+
+        await Task.Delay(500, cancellationToken);
+
+        Console.WriteLine($"Notification sent for customer {customerId}.");
+    })
+    .ExecuteAsync();
+```
+
+Inline tasks support the same retry and timeout settings as regular tasks.
+
+```csharp
+await new TaskPipeline()
+    .AddTask(
+        "Call external API",
+        async (_, cancellationToken) =>
+        {
+            await Task.Delay(500, cancellationToken);
+        },
+        retryCount: 3,
+        timeout: TimeSpan.FromSeconds(5))
+    .ExecuteAsync();
+```
+
+When no task name is provided, the default name is `InlineTask`.
+
+```csharp
+await new TaskPipeline()
+    .AddTask(context =>
+    {
+        context.Set("StartedAt", DateTimeOffset.UtcNow);
+        return Task.CompletedTask;
+    })
+    .ExecuteAsync();
+```
 
 ### Dependency Injection
 

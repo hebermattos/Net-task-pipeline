@@ -47,6 +47,53 @@ public sealed class TaskPipelineServiceProviderExtensionsTests
     }
 
     [Fact]
+    public async Task WithServiceProvider_ResolvesTaskFromPipelineServiceProvider()
+    {
+        var services = new ServiceCollection();
+        var marker = new ExecutionMarker();
+
+        services.AddSingleton(marker);
+        services.AddTransient<RegisteredDependencyTask>();
+
+        using var serviceProvider = services.BuildServiceProvider();
+
+        var result = await new TaskPipeline()
+            .WithServiceProvider(serviceProvider)
+            .AddTask<RegisteredDependencyTask>()
+            .ExecuteAsync();
+
+        Assert.True(result.Success);
+        Assert.True(marker.WasExecuted);
+        Assert.Equal(nameof(RegisteredDependencyTask), Assert.Single(result.TaskResults).TaskName);
+    }
+
+    [Fact]
+    public async Task WithServiceProvider_CanReplacePreviousServiceProvider()
+    {
+        var firstServices = new ServiceCollection();
+        var firstMarker = new ExecutionMarker();
+        firstServices.AddSingleton(firstMarker);
+        firstServices.AddTransient<RegisteredDependencyTask>();
+
+        var secondServices = new ServiceCollection();
+        var secondMarker = new ExecutionMarker();
+        secondServices.AddSingleton(secondMarker);
+        secondServices.AddTransient<RegisteredDependencyTask>();
+
+        using var firstServiceProvider = firstServices.BuildServiceProvider();
+        using var secondServiceProvider = secondServices.BuildServiceProvider();
+
+        var result = await new TaskPipeline(firstServiceProvider)
+            .WithServiceProvider(secondServiceProvider)
+            .AddTask<RegisteredDependencyTask>()
+            .ExecuteAsync();
+
+        Assert.True(result.Success);
+        Assert.False(firstMarker.WasExecuted);
+        Assert.True(secondMarker.WasExecuted);
+    }
+
+    [Fact]
     public async Task AddParallel_WithConstructorServiceProvider_ResolvesTasksFromPipelineServiceProvider()
     {
         var services = new ServiceCollection();
@@ -89,9 +136,48 @@ public sealed class TaskPipelineServiceProviderExtensionsTests
     }
 
     [Fact]
+    public async Task AddBranch_WithServiceProviderExtension_ChildPipelineInheritsServiceProvider()
+    {
+        var services = new ServiceCollection();
+        var marker = new ExecutionMarker();
+
+        services.AddSingleton(marker);
+        services.AddTransient<RegisteredDependencyTask>();
+
+        using var serviceProvider = services.BuildServiceProvider();
+
+        var result = await new TaskPipeline()
+            .WithServiceProvider(serviceProvider)
+            .AddBranch(
+                _ => "run",
+                branch => branch.When("run", flow => flow.AddTask<RegisteredDependencyTask>()))
+            .ExecuteAsync();
+
+        Assert.True(result.Success);
+        Assert.True(marker.WasExecuted);
+    }
+
+    [Fact]
     public void Constructor_WithNullServiceProvider_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() => new TaskPipeline(null!));
+    }
+
+    [Fact]
+    public void WithServiceProvider_WithNullPipeline_ThrowsArgumentNullException()
+    {
+        var services = new ServiceCollection();
+        using var serviceProvider = services.BuildServiceProvider();
+
+        TaskPipeline pipeline = null!;
+
+        Assert.Throws<ArgumentNullException>(() => pipeline.WithServiceProvider(serviceProvider));
+    }
+
+    [Fact]
+    public void WithServiceProvider_WithNullServiceProvider_ThrowsArgumentNullException()
+    {
+        Assert.Throws<ArgumentNullException>(() => new TaskPipeline().WithServiceProvider(null!));
     }
 
     [Fact]

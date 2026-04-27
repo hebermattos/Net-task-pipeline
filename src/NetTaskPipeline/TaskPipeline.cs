@@ -24,7 +24,7 @@ public sealed class TaskPipeline
 
     public TaskPipeline(IServiceProvider serviceProvider)
     {
-        _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+        RegisterServiceProvider(serviceProvider);
     }
 
     public TaskPipeline OnError(ErrorMode errorMode)
@@ -57,6 +57,12 @@ public sealed class TaskPipeline
             throw new ArgumentOutOfRangeException(nameof(maxDegreeOfParallelism), "The maximum degree of parallelism must be greater than zero.");
 
         _maxDegreeOfParallelism = maxDegreeOfParallelism;
+        return this;
+    }
+
+    internal TaskPipeline RegisterServiceProvider(IServiceProvider serviceProvider)
+    {
+        _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
         return this;
     }
 

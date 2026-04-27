@@ -10,13 +10,16 @@ context.Set("CustomerType", "premium");
 var result = await new TaskPipeline()
     .AddTask<LoadOrderTask>()
     .AddBranch(
-        condition: ctx => ctx.Get<decimal>("OrderTotal") >= 1_000m,
-        whenTrue: branch => branch
-            .AddTask<RequireManagerApprovalTask>()
-            .AddTask<ApplyPremiumDiscountTask>(),
-        whenFalse: branch => branch
-            .AddTask<AutoApproveOrderTask>(),
-        name: "Order approval decision")
+        selector: ctx => ctx.Get<string>("CustomerType"),
+        configure: branch => branch
+            .When("premium", flow => flow
+                .AddTask<RequireManagerApprovalTask>()
+                .AddTask<ApplyPremiumDiscountTask>())
+            .When("standard", flow => flow
+                .AddTask<RequireManagerApprovalTask>())
+            .Default(flow => flow
+                .AddTask<AutoApproveOrderTask>()),
+        name: "Customer type decision")
     .AddTask<SaveOrderTask>()
     .ExecuteAsync(context);
 
@@ -48,7 +51,7 @@ public sealed class RequireManagerApprovalTask : ITask
 {
     public Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
     {
-        Console.WriteLine("Order requires manager approval because the total is high.");
+        Console.WriteLine("Order requires manager approval.");
         context.Set("ApprovalStatus", "Manager approval required");
 
         return Task.CompletedTask;
@@ -76,7 +79,7 @@ public sealed class AutoApproveOrderTask : ITask
 {
     public Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
     {
-        Console.WriteLine("Order auto-approved because the total is below the approval threshold.");
+        Console.WriteLine("Order auto-approved by default branch.");
         context.Set("ApprovalStatus", "Auto-approved");
         context.Set("DiscountApplied", false);
 

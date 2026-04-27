@@ -4,33 +4,35 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace NetTaskPipeline;
 
-/// <summary>
-/// Executes tasks in sequential groups, allowing each group to run one or more tasks in parallel.
-/// </summary>
+/// <summary>Executes tasks in sequential groups, allowing each group to run one or more tasks in parallel.</summary>
 public sealed class TaskPipeline
 {
     private readonly List<PipelineStep> _steps = new List<PipelineStep>();
-
+    private IServiceProvider? _serviceProvider;
     private ErrorMode _errorMode = ErrorMode.StopOnFirstError;
     private int _defaultRetryCount;
     private TimeSpan? _defaultTimeout;
     private int? _maxDegreeOfParallelism;
 
-    /// <summary>
-    /// Configures how the pipeline behaves when a task fails.
-    /// </summary>
+    public TaskPipeline()
+    {
+    }
+
+    public TaskPipeline(IServiceProvider serviceProvider)
+    {
+        _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+    }
+
     public TaskPipeline OnError(ErrorMode errorMode)
     {
         _errorMode = errorMode;
         return this;
     }
 
-    /// <summary>
-    /// Configures the default number of retries for tasks that do not define a specific retry count.
-    /// </summary>
     public TaskPipeline WithRetry(int retryCount)
     {
         if (retryCount < 0)
@@ -40,9 +42,6 @@ public sealed class TaskPipeline
         return this;
     }
 
-    /// <summary>
-    /// Configures the default timeout for tasks that do not define a specific timeout.
-    /// </summary>
     public TaskPipeline WithTimeout(TimeSpan timeout)
     {
         if (timeout <= TimeSpan.Zero)
@@ -52,9 +51,6 @@ public sealed class TaskPipeline
         return this;
     }
 
-    /// <summary>
-    /// Configures the maximum number of tasks that can run concurrently inside a parallel group.
-    /// </summary>
     public TaskPipeline WithMaxDegreeOfParallelism(int maxDegreeOfParallelism)
     {
         if (maxDegreeOfParallelism <= 0)
@@ -64,95 +60,56 @@ public sealed class TaskPipeline
         return this;
     }
 
-    internal TaskPipeline AddTask(
-        ITask task,
-        int? retryCount = null,
-        TimeSpan? timeout = null,
-        string? name = null)
+    internal TTask CreateTask<TTask>() where TTask : ITask
+    {
+        return _serviceProvider != null
+            ? ActivatorUtilities.GetServiceOrCreateInstance<TTask>(_serviceProvider)
+            : Activator.CreateInstance<TTask>();
+    }
+
+    internal TaskPipeline AddTask(ITask task, int? retryCount = null, TimeSpan? timeout = null, string? name = null)
     {
         if (task == null)
             throw new ArgumentNullException(nameof(task));
 
-        var pipelineTask = new PipelineTask(
-            task,
-            name ?? task.GetType().Name,
-            retryCount,
-            timeout);
-
-        _steps.Add(PipelineStep.TaskGroup(TaskGroup.Sequential(pipelineTask)));
-
+        _steps.Add(PipelineStep.TaskGroup(TaskGroup.Sequential(new PipelineTask(task, name ?? task.GetType().Name, retryCount, timeout))));
         return this;
     }
 
-    internal TaskPipeline AddTask(params ITask[] tasks)
-    {
-        return AddParallel(tasks);
-    }
+    internal TaskPipeline AddTask(params ITask[] tasks) => AddParallel(tasks);
 
-    internal TaskPipeline AddParallel(
-        IEnumerable<ITask> tasks,
-        int? retryCount = null,
-        TimeSpan? timeout = null)
+    internal TaskPipeline AddParallel(IEnumerable<ITask> tasks, int? retryCount = null, TimeSpan? timeout = null)
     {
         if (tasks == null)
             throw new ArgumentNullException(nameof(tasks));
 
-        var pipelineTasks = tasks
-            .Select(task =>
-            {
-                if (task == null)
-                    throw new ArgumentException("The task list cannot contain null items.", nameof(tasks));
+        var pipelineTasks = tasks.Select(task =>
+        {
+            if (task == null)
+                throw new ArgumentException("The task list cannot contain null items.", nameof(tasks));
 
-                return new PipelineTask(
-                    task,
-                    task.GetType().Name,
-                    retryCount,
-                    timeout);
-            })
-            .ToList();
+            return new PipelineTask(task, task.GetType().Name, retryCount, timeout);
+        }).ToList();
 
         if (pipelineTasks.Count == 0)
             return this;
 
-        if (pipelineTasks.Count == 1)
-        {
-            _steps.Add(PipelineStep.TaskGroup(TaskGroup.Sequential(pipelineTasks[0])));
-        }
-        else
-        {
-            _steps.Add(PipelineStep.TaskGroup(TaskGroup.Parallel(pipelineTasks)));
-        }
+        _steps.Add(PipelineStep.TaskGroup(pipelineTasks.Count == 1
+            ? TaskGroup.Sequential(pipelineTasks[0])
+            : TaskGroup.Parallel(pipelineTasks)));
 
         return this;
     }
 
-    /// <summary>
-    /// Adds a conditional branch that executes one pipeline when the condition is true and another pipeline when it is false.
-    /// </summary>
-    public TaskPipeline AddBranch(
-        Func<TaskContext, bool> condition,
-        Action<TaskPipeline> whenTrue,
-        Action<TaskPipeline>? whenFalse = null,
-        string? name = null)
+    public TaskPipeline AddBranch(Func<TaskContext, bool> condition, Action<TaskPipeline> whenTrue, Action<TaskPipeline>? whenFalse = null, string? name = null)
     {
         if (condition == null)
             throw new ArgumentNullException(nameof(condition));
 
-        return AddBranch(
-            (context, _) => Task.FromResult(condition(context)),
-            whenTrue,
-            whenFalse,
-            name);
+        return AddBranch((context, _) => Task.FromResult(condition(context)), whenTrue, whenFalse, name);
     }
 
-    /// <summary>
-    /// Adds an asynchronous conditional branch that executes one pipeline when the condition is true and another pipeline when it is false.
-    /// </summary>
-    public TaskPipeline AddBranch(
-        Func<TaskContext, CancellationToken, Task<bool>> condition,
-        Action<TaskPipeline> whenTrue,
-        Action<TaskPipeline>? whenFalse = null,
-        string? name = null)
+    public TaskPipeline AddBranch(Func<TaskContext, CancellationToken, Task<bool>> condition, Action<TaskPipeline> whenTrue, Action<TaskPipeline>? whenFalse = null, string? name = null)
     {
         if (condition == null)
             throw new ArgumentNullException(nameof(condition));
@@ -164,36 +121,22 @@ public sealed class TaskPipeline
         whenTrue(truePipeline);
 
         TaskPipeline? falsePipeline = null;
-
         if (whenFalse != null)
         {
             falsePipeline = CreateChildPipeline();
             whenFalse(falsePipeline);
         }
 
-        _steps.Add(PipelineStep.Branch(new BranchStep(
-            name ?? "Conditional branch",
-            condition,
-            truePipeline,
-            falsePipeline)));
-
+        _steps.Add(PipelineStep.Branch(new BranchStep(name ?? "Conditional branch", condition, truePipeline, falsePipeline)));
         return this;
     }
 
-    /// <summary>
-    /// Executes the pipeline with a new shared context.
-    /// </summary>
     public Task<TaskPipelineResult> ExecuteAsync(CancellationToken cancellationToken = default)
     {
         return ExecuteAsync(new TaskContext(), cancellationToken);
     }
 
-    /// <summary>
-    /// Executes the pipeline with an existing shared context.
-    /// </summary>
-    public async Task<TaskPipelineResult> ExecuteAsync(
-        TaskContext context,
-        CancellationToken cancellationToken = default)
+    public async Task<TaskPipelineResult> ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
     {
         if (context == null)
             throw new ArgumentNullException(nameof(context));
@@ -204,30 +147,12 @@ public sealed class TaskPipeline
         for (var stepIndex = 0; stepIndex < _steps.Count; stepIndex++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-
             var step = _steps[stepIndex];
-            IReadOnlyList<TaskExecutionResult> stepResults;
-
-            if (step.TaskGroupValue != null)
-            {
-                stepResults = await ExecuteTaskGroupStepAsync(
-                    step.TaskGroupValue,
-                    context,
-                    stepIndex,
-                    cancellationToken).ConfigureAwait(false);
-            }
-            else if (step.BranchValue != null)
-            {
-                stepResults = await ExecuteBranchStepAsync(
-                    step.BranchValue,
-                    context,
-                    stepIndex,
-                    cancellationToken).ConfigureAwait(false);
-            }
-            else
-            {
-                stepResults = Array.Empty<TaskExecutionResult>();
-            }
+            IReadOnlyList<TaskExecutionResult> stepResults = step.TaskGroupValue != null
+                ? await ExecuteTaskGroupStepAsync(step.TaskGroupValue, context, stepIndex, cancellationToken).ConfigureAwait(false)
+                : step.BranchValue != null
+                    ? await ExecuteBranchStepAsync(step.BranchValue, context, stepIndex, cancellationToken).ConfigureAwait(false)
+                    : Array.Empty<TaskExecutionResult>();
 
             allResults.AddRange(stepResults);
 
@@ -236,7 +161,6 @@ public sealed class TaskPipeline
         }
 
         pipelineStopwatch.Stop();
-
         return new TaskPipelineResult(allResults, context, pipelineStopwatch.Elapsed);
     }
 
@@ -247,98 +171,55 @@ public sealed class TaskPipeline
             _errorMode = _errorMode,
             _defaultRetryCount = _defaultRetryCount,
             _defaultTimeout = _defaultTimeout,
-            _maxDegreeOfParallelism = _maxDegreeOfParallelism
+            _maxDegreeOfParallelism = _maxDegreeOfParallelism,
+            _serviceProvider = _serviceProvider
         };
     }
 
-    private async Task<IReadOnlyList<TaskExecutionResult>> ExecuteTaskGroupStepAsync(
-        TaskGroup group,
-        TaskContext context,
-        int groupIndex,
-        CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<TaskExecutionResult>> ExecuteTaskGroupStepAsync(TaskGroup group, TaskContext context, int groupIndex, CancellationToken cancellationToken)
     {
         if (group.IsParallel)
-        {
-            return await ExecuteParallelGroupAsync(
-                group,
-                context,
-                groupIndex,
-                cancellationToken).ConfigureAwait(false);
-        }
+            return await ExecuteParallelGroupAsync(group, context, groupIndex, cancellationToken).ConfigureAwait(false);
 
-        var result = await ExecuteTaskAsync(
-            group.Tasks[0],
-            context,
-            groupIndex,
-            cancellationToken,
-            cancellationToken).ConfigureAwait(false);
-
+        var result = await ExecuteTaskAsync(group.Tasks[0], context, groupIndex, cancellationToken, cancellationToken).ConfigureAwait(false);
         return new[] { result };
     }
 
-    private async Task<IReadOnlyList<TaskExecutionResult>> ExecuteBranchStepAsync(
-        BranchStep branch,
-        TaskContext context,
-        int groupIndex,
-        CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<TaskExecutionResult>> ExecuteBranchStepAsync(BranchStep branch, TaskContext context, int groupIndex, CancellationToken cancellationToken)
     {
         bool conditionResult;
-
         try
         {
             conditionResult = await branch.Condition(context, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            return new[]
-            {
-                CreateBranchFailureResult(branch.Name, groupIndex, ex)
-            };
+            return new[] { CreateBranchFailureResult(branch.Name, groupIndex, ex) };
         }
 
-        var selectedPipeline = conditionResult
-            ? branch.WhenTrue
-            : branch.WhenFalse;
-
+        var selectedPipeline = conditionResult ? branch.WhenTrue : branch.WhenFalse;
         if (selectedPipeline == null)
             return Array.Empty<TaskExecutionResult>();
 
-        var branchResult = await selectedPipeline.ExecuteAsync(
-            context,
-            cancellationToken).ConfigureAwait(false);
-
+        var branchResult = await selectedPipeline.ExecuteAsync(context, cancellationToken).ConfigureAwait(false);
         return branchResult.TaskResults;
     }
 
-    private async Task<IReadOnlyList<TaskExecutionResult>> ExecuteParallelGroupAsync(
-        TaskGroup group,
-        TaskContext context,
-        int groupIndex,
-        CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<TaskExecutionResult>> ExecuteParallelGroupAsync(TaskGroup group, TaskContext context, int groupIndex, CancellationToken cancellationToken)
     {
         using var groupCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-
-        var maxDegreeOfParallelism = Math.Min(
-            _maxDegreeOfParallelism ?? group.Tasks.Count,
-            group.Tasks.Count);
-
+        var maxDegreeOfParallelism = Math.Min(_maxDegreeOfParallelism ?? group.Tasks.Count, group.Tasks.Count);
         using var semaphore = new SemaphoreSlim(maxDegreeOfParallelism);
 
         var executions = group.Tasks.Select(async pipelineTask =>
         {
             await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-
             try
             {
                 if (groupCancellationTokenSource.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
                     return TaskExecutionResult.Skipped(pipelineTask.Name, groupIndex);
 
-                var result = await ExecuteTaskAsync(
-                    pipelineTask,
-                    context,
-                    groupIndex,
-                    cancellationToken,
-                    groupCancellationTokenSource.Token).ConfigureAwait(false);
+                var result = await ExecuteTaskAsync(pipelineTask, context, groupIndex, cancellationToken, groupCancellationTokenSource.Token).ConfigureAwait(false);
 
                 if (_errorMode == ErrorMode.StopOnFirstError && !result.Success)
                     groupCancellationTokenSource.Cancel();
@@ -354,20 +235,13 @@ public sealed class TaskPipeline
         return await Task.WhenAll(executions).ConfigureAwait(false);
     }
 
-    private async Task<TaskExecutionResult> ExecuteTaskAsync(
-        PipelineTask pipelineTask,
-        TaskContext context,
-        int groupIndex,
-        CancellationToken rootCancellationToken,
-        CancellationToken executionCancellationToken)
+    private async Task<TaskExecutionResult> ExecuteTaskAsync(PipelineTask pipelineTask, TaskContext context, int groupIndex, CancellationToken rootCancellationToken, CancellationToken executionCancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
         var startedAt = DateTimeOffset.UtcNow;
-
         var retryCount = pipelineTask.RetryCount ?? _defaultRetryCount;
         var timeout = pipelineTask.Timeout ?? _defaultTimeout;
         var maxAttempts = retryCount + 1;
-
         Exception? lastException = null;
         var status = TaskExecutionStatus.Failed;
         var attempts = 0;
@@ -377,16 +251,10 @@ public sealed class TaskPipeline
             attempts = attempt;
             rootCancellationToken.ThrowIfCancellationRequested();
 
-            using var timeoutCancellationTokenSource = CreateTimeoutCancellationTokenSource(
-                executionCancellationToken,
-                timeout);
-
+            using var timeoutCancellationTokenSource = CreateTimeoutCancellationTokenSource(executionCancellationToken, timeout);
             try
             {
-                await pipelineTask.Task.ExecuteAsync(
-                    context,
-                    timeoutCancellationTokenSource.Token).ConfigureAwait(false);
-
+                await pipelineTask.Task.ExecuteAsync(context, timeoutCancellationTokenSource.Token).ConfigureAwait(false);
                 status = TaskExecutionStatus.Success;
                 lastException = null;
                 break;
@@ -395,10 +263,7 @@ public sealed class TaskPipeline
             {
                 if (timeoutCancellationTokenSource.IsCancellationRequested && !executionCancellationToken.IsCancellationRequested)
                 {
-                    lastException = new TimeoutException(
-                        $"The task '{pipelineTask.Name}' exceeded the configured timeout of {timeout}.",
-                        ex);
-
+                    lastException = new TimeoutException($"The task '{pipelineTask.Name}' exceeded the configured timeout of {timeout}.", ex);
                     status = TaskExecutionStatus.Failed;
                 }
                 else
@@ -416,7 +281,6 @@ public sealed class TaskPipeline
         }
 
         stopwatch.Stop();
-
         return new TaskExecutionResult
         {
             TaskName = pipelineTask.Name,
@@ -430,13 +294,9 @@ public sealed class TaskPipeline
         };
     }
 
-    private static TaskExecutionResult CreateBranchFailureResult(
-        string branchName,
-        int groupIndex,
-        Exception exception)
+    private static TaskExecutionResult CreateBranchFailureResult(string branchName, int groupIndex, Exception exception)
     {
         var now = DateTimeOffset.UtcNow;
-
         return new TaskExecutionResult
         {
             TaskName = branchName,
@@ -450,12 +310,9 @@ public sealed class TaskPipeline
         };
     }
 
-    private static CancellationTokenSource CreateTimeoutCancellationTokenSource(
-        CancellationToken cancellationToken,
-        TimeSpan? timeout)
+    private static CancellationTokenSource CreateTimeoutCancellationTokenSource(CancellationToken cancellationToken, TimeSpan? timeout)
     {
         var cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-
         if (timeout.HasValue)
             cancellationTokenSource.CancelAfter(timeout.Value);
 
@@ -464,11 +321,7 @@ public sealed class TaskPipeline
 
     private sealed class PipelineTask
     {
-        public PipelineTask(
-            ITask task,
-            string name,
-            int? retryCount,
-            TimeSpan? timeout)
+        public PipelineTask(ITask task, string name, int? retryCount, TimeSpan? timeout)
         {
             Task = task;
             Name = name;
@@ -477,21 +330,14 @@ public sealed class TaskPipeline
         }
 
         public ITask Task { get; }
-
         public string Name { get; }
-
         public int? RetryCount { get; }
-
         public TimeSpan? Timeout { get; }
     }
 
     private sealed class BranchStep
     {
-        public BranchStep(
-            string name,
-            Func<TaskContext, CancellationToken, Task<bool>> condition,
-            TaskPipeline whenTrue,
-            TaskPipeline? whenFalse)
+        public BranchStep(string name, Func<TaskContext, CancellationToken, Task<bool>> condition, TaskPipeline whenTrue, TaskPipeline? whenFalse)
         {
             Name = name;
             Condition = condition;
@@ -500,11 +346,8 @@ public sealed class TaskPipeline
         }
 
         public string Name { get; }
-
         public Func<TaskContext, CancellationToken, Task<bool>> Condition { get; }
-
         public TaskPipeline WhenTrue { get; }
-
         public TaskPipeline? WhenFalse { get; }
     }
 
@@ -517,18 +360,9 @@ public sealed class TaskPipeline
         }
 
         public TaskGroup? TaskGroupValue { get; }
-
         public BranchStep? BranchValue { get; }
-
-        public static PipelineStep TaskGroup(TaskGroup taskGroup)
-        {
-            return new PipelineStep(taskGroup, null);
-        }
-
-        public static PipelineStep Branch(BranchStep branch)
-        {
-            return new PipelineStep(null, branch);
-        }
+        public static PipelineStep TaskGroup(TaskGroup taskGroup) => new PipelineStep(taskGroup, null);
+        public static PipelineStep Branch(BranchStep branch) => new PipelineStep(null, branch);
     }
 
     private sealed class TaskGroup
@@ -540,17 +374,8 @@ public sealed class TaskPipeline
         }
 
         public bool IsParallel { get; }
-
         public IReadOnlyList<PipelineTask> Tasks { get; }
-
-        public static TaskGroup Sequential(PipelineTask task)
-        {
-            return new TaskGroup(false, new[] { task });
-        }
-
-        public static TaskGroup Parallel(IReadOnlyList<PipelineTask> tasks)
-        {
-            return new TaskGroup(true, tasks);
-        }
+        public static TaskGroup Sequential(PipelineTask task) => new TaskGroup(false, new[] { task });
+        public static TaskGroup Parallel(IReadOnlyList<PipelineTask> tasks) => new TaskGroup(true, tasks);
     }
 }

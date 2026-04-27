@@ -8,6 +8,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimpleExample", "examples\S
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdvancedExample", "examples\AdvancedExample\AdvancedExample.csproj", "{2F5B40FB-BBFD-495D-A4A4-D56DD2A68A45}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BranchingExample", "examples\BranchingExample\BranchingExample.csproj", "{55D9E83A-3F64-4464-BD5F-7F8DC10B871B}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetTaskPipeline.Tests", "tests\NetTaskPipeline.Tests\NetTaskPipeline.Tests.csproj", "{E923212A-2FDB-46E0-BC01-A6E6E2B170A9}"
 EndProject
 Global
@@ -28,6 +30,10 @@ Global
 		{2F5B40FB-BBFD-495D-A4A4-D56DD2A68A45}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2F5B40FB-BBFD-495D-A4A4-D56DD2A68A45}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{2F5B40FB-BBFD-495D-A4A4-D56DD2A68A45}.Release|Any CPU.Build.0 = Release|Any CPU
+		{55D9E83A-3F64-4464-BD5F-7F8DC10B871B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{55D9E83A-3F64-4464-BD5F-7F8DC10B871B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{55D9E83A-3F64-4464-BD5F-7F8DC10B871B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{55D9E83A-3F64-4464-BD5F-7F8DC10B871B}.Release|Any CPU.Build.0 = Release|Any CPU
 		{E923212A-2FDB-46E0-BC01-A6E6E2B170A9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{E923212A-2FDB-46E0-BC01-A6E6E2B170A9}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E923212A-2FDB-46E0-BC01-A6E6E2B170A9}.Release|Any CPU.ActiveCfg = Release|Any CPU

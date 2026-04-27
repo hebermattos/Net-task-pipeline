@@ -212,24 +212,25 @@ public sealed class TaskPipelineTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_WithBranchTrue_ExecutesTrueFlow()
+    public async Task ExecuteAsync_WithValueBranchPremium_ExecutesPremiumFlow()
     {
         var context = new TaskContext();
-        context.Set("IsPremiumCustomer", true);
+        context.Set("CustomerType", "premium");
 
         var result = await new TaskPipeline()
             .AddBranch(
-                ctx => ctx.Get<bool>("IsPremiumCustomer"),
-                whenTrue: branch => branch.AddTask(new DelegateTask("Premium flow", ctx =>
-                {
-                    ctx.Set("SelectedFlow", "premium");
-                    return Task.CompletedTask;
-                })),
-                whenFalse: branch => branch.AddTask(new DelegateTask("Standard flow", ctx =>
-                {
-                    ctx.Set("SelectedFlow", "standard");
-                    return Task.CompletedTask;
-                })),
+                ctx => ctx.Get<string>("CustomerType"),
+                branch => branch
+                    .When("premium", flow => flow.AddTask(new DelegateTask("Premium flow", ctx =>
+                    {
+                        ctx.Set("SelectedFlow", "premium");
+                        return Task.CompletedTask;
+                    })))
+                    .When("standard", flow => flow.AddTask(new DelegateTask("Standard flow", ctx =>
+                    {
+                        ctx.Set("SelectedFlow", "standard");
+                        return Task.CompletedTask;
+                    }))),
                 name: "Customer type decision")
             .ExecuteAsync(context);
 
@@ -241,24 +242,25 @@ public sealed class TaskPipelineTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_WithBranchFalse_ExecutesFalseFlow()
+    public async Task ExecuteAsync_WithValueBranchStandard_ExecutesStandardFlow()
     {
         var context = new TaskContext();
-        context.Set("IsPremiumCustomer", false);
+        context.Set("CustomerType", "standard");
 
         var result = await new TaskPipeline()
             .AddBranch(
-                ctx => ctx.Get<bool>("IsPremiumCustomer"),
-                whenTrue: branch => branch.AddTask(new DelegateTask("Premium flow", ctx =>
-                {
-                    ctx.Set("SelectedFlow", "premium");
-                    return Task.CompletedTask;
-                })),
-                whenFalse: branch => branch.AddTask(new DelegateTask("Standard flow", ctx =>
-                {
-                    ctx.Set("SelectedFlow", "standard");
-                    return Task.CompletedTask;
-                })),
+                ctx => ctx.Get<string>("CustomerType"),
+                branch => branch
+                    .When("premium", flow => flow.AddTask(new DelegateTask("Premium flow", ctx =>
+                    {
+                        ctx.Set("SelectedFlow", "premium");
+                        return Task.CompletedTask;
+                    })))
+                    .When("standard", flow => flow.AddTask(new DelegateTask("Standard flow", ctx =>
+                    {
+                        ctx.Set("SelectedFlow", "standard");
+                        return Task.CompletedTask;
+                    }))),
                 name: "Customer type decision")
             .ExecuteAsync(context);
 
@@ -270,7 +272,7 @@ public sealed class TaskPipelineTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_WithAsyncBranchCondition_ExecutesSelectedFlow()
+    public async Task ExecuteAsync_WithAsyncValueBranchSelector_ExecutesSelectedFlow()
     {
         var context = new TaskContext();
         context.Set("Total", 1500m);
@@ -280,18 +282,19 @@ public sealed class TaskPipelineTests
                 async (ctx, cancellationToken) =>
                 {
                     await Task.Delay(50, cancellationToken);
-                    return ctx.Get<decimal>("Total") >= 1000m;
+                    return ctx.Get<decimal>("Total") >= 1000m ? "high-value" : "low-value";
                 },
-                whenTrue: branch => branch.AddTask(new DelegateTask("High value flow", ctx =>
-                {
-                    ctx.Set("RequiresApproval", true);
-                    return Task.CompletedTask;
-                })),
-                whenFalse: branch => branch.AddTask(new DelegateTask("Low value flow", ctx =>
-                {
-                    ctx.Set("RequiresApproval", false);
-                    return Task.CompletedTask;
-                })),
+                branch => branch
+                    .When("high-value", flow => flow.AddTask(new DelegateTask("High value flow", ctx =>
+                    {
+                        ctx.Set("RequiresApproval", true);
+                        return Task.CompletedTask;
+                    })))
+                    .When("low-value", flow => flow.AddTask(new DelegateTask("Low value flow", ctx =>
+                    {
+                        ctx.Set("RequiresApproval", false);
+                        return Task.CompletedTask;
+                    }))),
                 name: "Approval decision")
             .ExecuteAsync(context);
 
@@ -303,12 +306,12 @@ public sealed class TaskPipelineTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_WithBranchConditionFailure_ReturnsFailedResult()
+    public async Task ExecuteAsync_WithValueBranchSelectorFailure_ReturnsFailedResult()
     {
         var result = await new TaskPipeline()
-            .AddBranch(
-                _ => throw new InvalidOperationException("The branch condition failed."),
-                whenTrue: branch => branch.AddTask(new DelegateTask("Should not run", _ => Task.CompletedTask)),
+            .AddBranch<string>(
+                _ => throw new InvalidOperationException("The branch selector failed."),
+                branch => branch.When("run", flow => flow.AddTask(new DelegateTask("Should not run", _ => Task.CompletedTask))),
                 name: "Failing decision")
             .ExecuteAsync();
 
@@ -412,19 +415,19 @@ public sealed class TaskPipelineTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_WithFalseBranchAndNoFalseFlow_ReturnsNoTaskResults()
+    public async Task ExecuteAsync_WithValueBranchWithoutMatchingFlow_ReturnsNoTaskResults()
     {
         var context = new TaskContext();
-        context.Set("RunTrueFlow", false);
+        context.Set("Flow", "none");
 
         var result = await new TaskPipeline()
             .AddBranch(
-                ctx => ctx.Get<bool>("RunTrueFlow"),
-                whenTrue: branch => branch.AddTask(new DelegateTask("True flow", ctx =>
+                ctx => ctx.Get<string>("Flow"),
+                branch => branch.When("run", flow => flow.AddTask(new DelegateTask("Run flow", ctx =>
                 {
                     ctx.Set("Executed", true);
                     return Task.CompletedTask;
-                })),
+                }))),
                 name: "Optional decision")
             .ExecuteAsync(context);
 
@@ -434,15 +437,15 @@ public sealed class TaskPipelineTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_WithBranch_InheritsRetryConfiguration()
+    public async Task ExecuteAsync_WithValueBranch_InheritsRetryConfiguration()
     {
         var attempts = 0;
 
         var result = await new TaskPipeline()
             .WithRetry(1)
             .AddBranch(
-                _ => true,
-                whenTrue: branch => branch.AddTask(new DelegateTask("Retry inherited", _ =>
+                _ => "run",
+                branch => branch.When("run", flow => flow.AddTask(new DelegateTask("Retry inherited", _ =>
                 {
                     attempts++;
 
@@ -450,7 +453,7 @@ public sealed class TaskPipelineTests
                         throw new InvalidOperationException("Temporary failure.");
 
                     return Task.CompletedTask;
-                })),
+                }))),
                 name: "Retry branch")
             .ExecuteAsync();
 
@@ -462,13 +465,13 @@ public sealed class TaskPipelineTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_WithBranch_InheritsTimeoutConfiguration()
+    public async Task ExecuteAsync_WithValueBranch_InheritsTimeoutConfiguration()
     {
         var result = await new TaskPipeline()
             .WithTimeout(TimeSpan.FromMilliseconds(100))
             .AddBranch(
-                _ => true,
-                whenTrue: branch => branch.AddTask(new DelayTask("Slow branch task", TimeSpan.FromSeconds(3))),
+                _ => "run",
+                branch => branch.When("run", flow => flow.AddTask(new DelayTask("Slow branch task", TimeSpan.FromSeconds(3)))),
                 name: "Timeout branch")
             .ExecuteAsync();
 

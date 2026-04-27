@@ -1,4 +1,6 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace NetTaskPipeline;
 
@@ -25,6 +27,89 @@ public static class TaskPipelineTaskExtensions
             retryCount,
             timeout,
             name ?? typeof(TTask).Name);
+    }
+
+    /// <summary>
+    /// Adds a single sequential inline task using a delegate.
+    /// </summary>
+    public static TaskPipeline AddTask(
+        this TaskPipeline pipeline,
+        string name,
+        Func<TaskContext, Task> execute,
+        int? retryCount = null,
+        TimeSpan? timeout = null)
+    {
+        if (execute == null)
+            throw new ArgumentNullException(nameof(execute));
+
+        return pipeline.AddTask(
+            name,
+            (context, _) => execute(context),
+            retryCount,
+            timeout);
+    }
+
+    /// <summary>
+    /// Adds a single sequential inline task using a delegate with cancellation support.
+    /// </summary>
+    public static TaskPipeline AddTask(
+        this TaskPipeline pipeline,
+        string name,
+        Func<TaskContext, CancellationToken, Task> execute,
+        int? retryCount = null,
+        TimeSpan? timeout = null)
+    {
+        if (pipeline == null)
+            throw new ArgumentNullException(nameof(pipeline));
+
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("The task name cannot be null, empty, or whitespace.", nameof(name));
+
+        if (execute == null)
+            throw new ArgumentNullException(nameof(execute));
+
+        return pipeline.AddTask(
+            new InlineTask(execute),
+            retryCount,
+            timeout,
+            name);
+    }
+
+    /// <summary>
+    /// Adds a single sequential inline task using a delegate and the default task name.
+    /// </summary>
+    public static TaskPipeline AddTask(
+        this TaskPipeline pipeline,
+        Func<TaskContext, Task> execute,
+        int? retryCount = null,
+        TimeSpan? timeout = null,
+        string? name = null)
+    {
+        if (execute == null)
+            throw new ArgumentNullException(nameof(execute));
+
+        return pipeline.AddTask(
+            name ?? "InlineTask",
+            (context, _) => execute(context),
+            retryCount,
+            timeout);
+    }
+
+    /// <summary>
+    /// Adds a single sequential inline task using a delegate with cancellation support and the default task name.
+    /// </summary>
+    public static TaskPipeline AddTask(
+        this TaskPipeline pipeline,
+        Func<TaskContext, CancellationToken, Task> execute,
+        int? retryCount = null,
+        TimeSpan? timeout = null,
+        string? name = null)
+    {
+        return pipeline.AddTask(
+            name ?? "InlineTask",
+            execute,
+            retryCount,
+            timeout);
     }
 
     /// <summary>
@@ -100,5 +185,20 @@ public static class TaskPipelineTaskExtensions
             },
             retryCount,
             timeout);
+    }
+
+    private sealed class InlineTask : ITask
+    {
+        private readonly Func<TaskContext, CancellationToken, Task> _execute;
+
+        public InlineTask(Func<TaskContext, CancellationToken, Task> execute)
+        {
+            _execute = execute ?? throw new ArgumentNullException(nameof(execute));
+        }
+
+        public Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
+        {
+            return _execute(context, cancellationToken);
+        }
     }
 }

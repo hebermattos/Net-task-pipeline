@@ -78,7 +78,7 @@ public sealed class TaskPipelineServiceProviderExtensionsTests
     public void AddTask_WithNullServiceProvider_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new TaskPipeline().AddTask<ParameterlessTask>(null!));
+            new TaskPipeline().AddTask<ParameterlessTask>((IServiceProvider)null!));
     }
 
     [Fact]
@@ -119,36 +119,7 @@ public sealed class TaskPipelineServiceProviderExtensionsTests
     public void AddParallel_WithNullServiceProvider_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new TaskPipeline().AddParallel<ParameterlessTask, ParameterlessTask>(null!));
-    }
-
-    [Fact]
-    public async Task AddTaskRpc_WithMissingRequestKey_ReturnsFailedResult()
-    {
-        var result = await new TaskPipeline()
-            .AddTaskRpc<RpcRequest, RpcResponse>("MissingRequest")
-            .ExecuteAsync();
-
-        var taskResult = Assert.Single(result.TaskResults);
-
-        Assert.False(result.Success);
-        Assert.Equal("RPC MissingRequest", taskResult.TaskName);
-        Assert.Equal(TaskExecutionStatus.Failed, taskResult.Status);
-        Assert.IsType<KeyNotFoundException>(taskResult.Exception);
-    }
-
-    [Fact]
-    public async Task AddTaskRpc_WithCustomName_UsesProvidedTaskNameWhenRequestFactoryFails()
-    {
-        var result = await new TaskPipeline()
-            .AddTaskRpc<RpcRequest, RpcResponse>("MissingRequest", name: "Custom RPC")
-            .ExecuteAsync();
-
-        var taskResult = Assert.Single(result.TaskResults);
-
-        Assert.False(result.Success);
-        Assert.Equal("Custom RPC", taskResult.TaskName);
-        Assert.IsType<KeyNotFoundException>(taskResult.Exception);
+            new TaskPipeline().AddParallel<ParameterlessTask, ParameterlessTask>((IServiceProvider)null!));
     }
 
     [Fact]

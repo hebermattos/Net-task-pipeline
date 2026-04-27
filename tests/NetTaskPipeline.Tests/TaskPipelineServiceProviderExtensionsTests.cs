@@ -262,11 +262,12 @@ public sealed class TaskPipelineServiceProviderExtensionsTests
 
         public SecondParallelDependencyTask(ExecutionMarker marker)
         {
-            _marker.SecondWasExecuted = true;
+            _marker = marker;
         }
 
         public Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
         {
+            _marker.SecondWasExecuted = true;
             return Task.CompletedTask;
         }
     }

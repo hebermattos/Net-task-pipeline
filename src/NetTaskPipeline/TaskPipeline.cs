@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace NetTaskPipeline;
 
@@ -13,11 +14,27 @@ namespace NetTaskPipeline;
 public sealed class TaskPipeline
 {
     private readonly List<PipelineStep> _steps = new List<PipelineStep>();
+    private readonly IServiceProvider? _serviceProvider;
 
     private ErrorMode _errorMode = ErrorMode.StopOnFirstError;
     private int _defaultRetryCount;
     private TimeSpan? _defaultTimeout;
     private int? _maxDegreeOfParallelism;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TaskPipeline"/> class.
+    /// </summary>
+    public TaskPipeline()
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TaskPipeline"/> class using a service provider for typed task resolution.
+    /// </summary>
+    public TaskPipeline(IServiceProvider serviceProvider)
+    {
+        _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+    }
 
     /// <summary>
     /// Configures how the pipeline behaves when a task fails.
@@ -62,6 +79,15 @@ public sealed class TaskPipeline
 
         _maxDegreeOfParallelism = maxDegreeOfParallelism;
         return this;
+    }
+
+    internal TTask CreateTask<TTask>()
+        where TTask : ITask
+    {
+        if (_serviceProvider != null)
+            return ActivatorUtilities.GetServiceOrCreateInstance<TTask>(_serviceProvider);
+
+        return Activator.CreateInstance<TTask>();
     }
 
     internal TaskPipeline AddTask(
@@ -247,7 +273,8 @@ public sealed class TaskPipeline
             _errorMode = _errorMode,
             _defaultRetryCount = _defaultRetryCount,
             _defaultTimeout = _defaultTimeout,
-            _maxDegreeOfParallelism = _maxDegreeOfParallelism
+            _maxDegreeOfParallelism = _maxDegreeOfParallelism,
+            _serviceProvider = _serviceProvider
         };
     }
 

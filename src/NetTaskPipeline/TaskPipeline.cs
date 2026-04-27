@@ -131,6 +131,44 @@ public sealed class TaskPipeline
         return this;
     }
 
+    public TaskPipeline AddBranch<TValue>(Func<TaskContext, TValue> selector, Action<TaskBranchBuilder<TValue>> configure, string? name = null)
+    {
+        if (selector == null)
+            throw new ArgumentNullException(nameof(selector));
+
+        return AddBranch((context, _) => Task.FromResult(selector(context)), configure, name);
+    }
+
+    public TaskPipeline AddBranch<TValue>(Func<TaskContext, CancellationToken, Task<TValue>> selector, Action<TaskBranchBuilder<TValue>> configure, string? name = null)
+    {
+        if (selector == null)
+            throw new ArgumentNullException(nameof(selector));
+
+        if (configure == null)
+            throw new ArgumentNullException(nameof(configure));
+
+        var builder = new TaskBranchBuilder<TValue>();
+        configure(builder);
+
+        var branches = builder.Cases
+            .Select(branchCase => new ValueBranchCase<TValue>(
+                branchCase.Value,
+                CreateConfiguredChildPipeline(branchCase.Flow)))
+            .ToList();
+
+        var defaultPipeline = builder.DefaultFlow == null
+            ? null
+            : CreateConfiguredChildPipeline(builder.DefaultFlow);
+
+        _steps.Add(PipelineStep.ValueBranch(new ValueBranchStep<TValue>(
+            name ?? "Value branch",
+            selector,
+            branches,
+            defaultPipeline)));
+
+        return this;
+    }
+
     public Task<TaskPipelineResult> ExecuteAsync(CancellationToken cancellationToken = default)
     {
         return ExecuteAsync(new TaskContext(), cancellationToken);
@@ -152,7 +190,9 @@ public sealed class TaskPipeline
                 ? await ExecuteTaskGroupStepAsync(step.TaskGroupValue, context, stepIndex, cancellationToken).ConfigureAwait(false)
                 : step.BranchValue != null
                     ? await ExecuteBranchStepAsync(step.BranchValue, context, stepIndex, cancellationToken).ConfigureAwait(false)
-                    : Array.Empty<TaskExecutionResult>();
+                    : step.ValueBranchValue != null
+                        ? await step.ValueBranchValue.ExecuteAsync(context, stepIndex, cancellationToken).ConfigureAwait(false)
+                        : Array.Empty<TaskExecutionResult>();
 
             allResults.AddRange(stepResults);
 
@@ -174,6 +214,13 @@ public sealed class TaskPipeline
             _maxDegreeOfParallelism = _maxDegreeOfParallelism,
             _serviceProvider = _serviceProvider
         };
+    }
+
+    private TaskPipeline CreateConfiguredChildPipeline(Action<TaskPipeline> configure)
+    {
+        var pipeline = CreateChildPipeline();
+        configure(pipeline);
+        return pipeline;
     }
 
     private async Task<IReadOnlyList<TaskExecutionResult>> ExecuteTaskGroupStepAsync(TaskGroup group, TaskContext context, int groupIndex, CancellationToken cancellationToken)
@@ -351,18 +398,76 @@ public sealed class TaskPipeline
         public TaskPipeline? WhenFalse { get; }
     }
 
+    private interface IValueBranchStep
+    {
+        Task<IReadOnlyList<TaskExecutionResult>> ExecuteAsync(TaskContext context, int groupIndex, CancellationToken cancellationToken);
+    }
+
+    private sealed class ValueBranchStep<TValue> : IValueBranchStep
+    {
+        public ValueBranchStep(string name, Func<TaskContext, CancellationToken, Task<TValue>> selector, IReadOnlyList<ValueBranchCase<TValue>> cases, TaskPipeline? defaultPipeline)
+        {
+            Name = name;
+            Selector = selector;
+            Cases = cases;
+            DefaultPipeline = defaultPipeline;
+        }
+
+        public string Name { get; }
+        public Func<TaskContext, CancellationToken, Task<TValue>> Selector { get; }
+        public IReadOnlyList<ValueBranchCase<TValue>> Cases { get; }
+        public TaskPipeline? DefaultPipeline { get; }
+
+        public async Task<IReadOnlyList<TaskExecutionResult>> ExecuteAsync(TaskContext context, int groupIndex, CancellationToken cancellationToken)
+        {
+            TValue selectedValue;
+            try
+            {
+                selectedValue = await Selector(context, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                return new[] { CreateBranchFailureResult(Name, groupIndex, ex) };
+            }
+
+            var selectedPipeline = Cases.FirstOrDefault(branchCase => EqualityComparer<TValue>.Default.Equals(branchCase.Value, selectedValue))?.Pipeline
+                ?? DefaultPipeline;
+
+            if (selectedPipeline == null)
+                return Array.Empty<TaskExecutionResult>();
+
+            var branchResult = await selectedPipeline.ExecuteAsync(context, cancellationToken).ConfigureAwait(false);
+            return branchResult.TaskResults;
+        }
+    }
+
+    private sealed class ValueBranchCase<TValue>
+    {
+        public ValueBranchCase(TValue value, TaskPipeline pipeline)
+        {
+            Value = value;
+            Pipeline = pipeline;
+        }
+
+        public TValue Value { get; }
+        public TaskPipeline Pipeline { get; }
+    }
+
     private sealed class PipelineStep
     {
-        private PipelineStep(TaskGroup? taskGroup, BranchStep? branch)
+        private PipelineStep(TaskGroup? taskGroup, BranchStep? branch, IValueBranchStep? valueBranch)
         {
             TaskGroupValue = taskGroup;
             BranchValue = branch;
+            ValueBranchValue = valueBranch;
         }
 
         public TaskGroup? TaskGroupValue { get; }
         public BranchStep? BranchValue { get; }
-        public static PipelineStep TaskGroup(TaskGroup taskGroup) => new PipelineStep(taskGroup, null);
-        public static PipelineStep Branch(BranchStep branch) => new PipelineStep(null, branch);
+        public IValueBranchStep? ValueBranchValue { get; }
+        public static PipelineStep TaskGroup(TaskGroup taskGroup) => new PipelineStep(taskGroup, null, null);
+        public static PipelineStep Branch(BranchStep branch) => new PipelineStep(null, branch, null);
+        public static PipelineStep ValueBranch<TValue>(ValueBranchStep<TValue> branch) => new PipelineStep(null, null, branch);
     }
 
     private sealed class TaskGroup

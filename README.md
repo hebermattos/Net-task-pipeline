@@ -22,7 +22,7 @@ A lightweight async task pipeline for .NET with sequential and parallel executio
 - Error handling modes
 - Execution result reporting
 - Maximum degree of parallelism for parallel groups
-- Runnable simple, advanced, and RabbitMQ RPC Docker examples
+- Runnable simple, advanced, branching, and RabbitMQ RPC Docker examples
 
 ## Basic usage
 
@@ -203,7 +203,7 @@ public sealed class AuditTask : ITask
 
 ## Context usage with branching
 
-`AddBranch` can choose the next flow from a value stored in `TaskContext`.
+`AddBranch` can choose the next flow from a value stored in `TaskContext`. Every `When` option receives an `Action<TaskPipeline>` so each branch can configure one or more tasks.
 
 ```csharp
 var context = new TaskContext();
@@ -211,12 +211,18 @@ context.Set("CustomerType", "premium");
 
 var result = await new TaskPipeline()
     .AddBranch(
-        ctx => ctx.Get<string>("CustomerType"),
-        branch => branch
-            .When<ApplyPremiumDiscountTask, SendPremiumEmailTask>("premium")
-            .When<ApplyStandardDiscountTask, SendStandardEmailTask>("standard")
-            .When<BlockOrderTask>("blocked")
-            .Default<ReviewCustomerManuallyTask>(),
+        selector: ctx => ctx.Get<string>("CustomerType"),
+        configure: branch => branch
+            .When("premium", flow => flow
+                .AddTask<ApplyPremiumDiscountTask>()
+                .AddTask<SendPremiumEmailTask>())
+            .When("standard", flow => flow
+                .AddTask<ApplyStandardDiscountTask>()
+                .AddTask<SendStandardEmailTask>())
+            .When("blocked", flow => flow
+                .AddTask<BlockOrderTask>())
+            .Default(flow => flow
+                .AddTask<ReviewCustomerManuallyTask>()),
         name: "Customer type decision")
     .AddTask<SaveOrderTask>()
     .ExecuteAsync(context);
@@ -236,8 +242,8 @@ await new TaskPipeline()
                 : "low-value";
         },
         branch => branch
-            .When<RequireManagerApprovalTask>("high-value")
-            .When<AutoApproveTask>("low-value"),
+            .When("high-value", flow => flow.AddTask<RequireManagerApprovalTask>())
+            .When("low-value", flow => flow.AddTask<AutoApproveTask>()),
         name: "Approval decision")
     .ExecuteAsync(context);
 ```
@@ -373,6 +379,7 @@ The repository includes runnable examples.
 ```bash
 dotnet run --project examples/SimpleExample/SimpleExample.csproj
 dotnet run --project examples/AdvancedExample/AdvancedExample.csproj
+dotnet run --project examples/BranchingExample/BranchingExample.csproj
 ```
 
 The RabbitMQ RPC Docker example can be started with Docker Compose:

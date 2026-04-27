@@ -139,7 +139,9 @@ public sealed class TaskBranchBuilderTests
     public void AddBranch_WithNullSelector_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new TaskPipeline().AddBranch<string>(null!, branch => branch.When("premium", flow => flow.AddTask(new DelegateTask("Premium", _ => Task.CompletedTask)))));
+            new TaskPipeline().AddBranch(
+                (Func<TaskContext, string>)null!,
+                branch => branch.When("premium", flow => flow.AddTask(new DelegateTask("Premium", _ => Task.CompletedTask)))));
     }
 
     [Fact]

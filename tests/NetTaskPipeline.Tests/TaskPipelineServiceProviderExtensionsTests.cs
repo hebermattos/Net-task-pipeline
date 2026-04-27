@@ -27,6 +27,74 @@ public sealed class TaskPipelineServiceProviderExtensionsTests
     }
 
     [Fact]
+    public async Task AddTask_WithConstructorServiceProvider_ResolvesTaskFromPipelineServiceProvider()
+    {
+        var services = new ServiceCollection();
+        var marker = new ExecutionMarker();
+
+        services.AddSingleton(marker);
+        services.AddTransient<RegisteredDependencyTask>();
+
+        using var serviceProvider = services.BuildServiceProvider();
+
+        var result = await new TaskPipeline(serviceProvider)
+            .AddTask<RegisteredDependencyTask>()
+            .ExecuteAsync();
+
+        Assert.True(result.Success);
+        Assert.True(marker.WasExecuted);
+        Assert.Equal(nameof(RegisteredDependencyTask), Assert.Single(result.TaskResults).TaskName);
+    }
+
+    [Fact]
+    public async Task AddParallel_WithConstructorServiceProvider_ResolvesTasksFromPipelineServiceProvider()
+    {
+        var services = new ServiceCollection();
+        var marker = new ExecutionMarker();
+
+        services.AddSingleton(marker);
+        services.AddTransient<FirstParallelDependencyTask>();
+        services.AddTransient<SecondParallelDependencyTask>();
+
+        using var serviceProvider = services.BuildServiceProvider();
+
+        var result = await new TaskPipeline(serviceProvider)
+            .AddParallel<FirstParallelDependencyTask, SecondParallelDependencyTask>()
+            .ExecuteAsync();
+
+        Assert.True(result.Success);
+        Assert.True(marker.FirstWasExecuted);
+        Assert.True(marker.SecondWasExecuted);
+    }
+
+    [Fact]
+    public async Task AddBranch_WithConstructorServiceProvider_ChildPipelineInheritsServiceProvider()
+    {
+        var services = new ServiceCollection();
+        var marker = new ExecutionMarker();
+
+        services.AddSingleton(marker);
+        services.AddTransient<RegisteredDependencyTask>();
+
+        using var serviceProvider = services.BuildServiceProvider();
+
+        var result = await new TaskPipeline(serviceProvider)
+            .AddBranch(
+                _ => true,
+                whenTrue: branch => branch.AddTask<RegisteredDependencyTask>())
+            .ExecuteAsync();
+
+        Assert.True(result.Success);
+        Assert.True(marker.WasExecuted);
+    }
+
+    [Fact]
+    public void Constructor_WithNullServiceProvider_ThrowsArgumentNullException()
+    {
+        Assert.Throws<ArgumentNullException>(() => new TaskPipeline(null!));
+    }
+
+    [Fact]
     public async Task AddTask_WithUnregisteredTask_CreatesTaskUsingConstructorDependencies()
     {
         var services = new ServiceCollection();

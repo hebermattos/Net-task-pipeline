@@ -80,8 +80,8 @@ public sealed class TaskPipelineServiceProviderExtensionsTests
 
         var result = await new TaskPipeline(serviceProvider)
             .AddBranch(
-                _ => true,
-                whenTrue: branch => branch.AddTask<RegisteredDependencyTask>())
+                _ => "run",
+                branch => branch.When("run", flow => flow.AddTask<RegisteredDependencyTask>()))
             .ExecuteAsync();
 
         Assert.True(result.Success);

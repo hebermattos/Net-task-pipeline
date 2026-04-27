@@ -191,7 +191,7 @@ public sealed class TaskPipeline
                 : step.BranchValue != null
                     ? await ExecuteBranchStepAsync(step.BranchValue, context, stepIndex, cancellationToken).ConfigureAwait(false)
                     : step.ValueBranchValue != null
-                        ? await ExecuteValueBranchStepAsync(step.ValueBranchValue, context, stepIndex, cancellationToken).ConfigureAwait(false)
+                        ? await step.ValueBranchValue.ExecuteAsync(context, stepIndex, cancellationToken).ConfigureAwait(false)
                         : Array.Empty<TaskExecutionResult>();
 
             allResults.AddRange(stepResults);
@@ -245,28 +245,6 @@ public sealed class TaskPipeline
         }
 
         var selectedPipeline = conditionResult ? branch.WhenTrue : branch.WhenFalse;
-        if (selectedPipeline == null)
-            return Array.Empty<TaskExecutionResult>();
-
-        var branchResult = await selectedPipeline.ExecuteAsync(context, cancellationToken).ConfigureAwait(false);
-        return branchResult.TaskResults;
-    }
-
-    private async Task<IReadOnlyList<TaskExecutionResult>> ExecuteValueBranchStepAsync<TValue>(ValueBranchStep<TValue> branch, TaskContext context, int groupIndex, CancellationToken cancellationToken)
-    {
-        TValue selectedValue;
-        try
-        {
-            selectedValue = await branch.Selector(context, cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            return new[] { CreateBranchFailureResult(branch.Name, groupIndex, ex) };
-        }
-
-        var selectedPipeline = branch.Cases.FirstOrDefault(branchCase => EqualityComparer<TValue>.Default.Equals(branchCase.Value, selectedValue))?.Pipeline
-            ?? branch.DefaultPipeline;
-
         if (selectedPipeline == null)
             return Array.Empty<TaskExecutionResult>();
 
@@ -420,7 +398,12 @@ public sealed class TaskPipeline
         public TaskPipeline? WhenFalse { get; }
     }
 
-    private sealed class ValueBranchStep<TValue>
+    private interface IValueBranchStep
+    {
+        Task<IReadOnlyList<TaskExecutionResult>> ExecuteAsync(TaskContext context, int groupIndex, CancellationToken cancellationToken);
+    }
+
+    private sealed class ValueBranchStep<TValue> : IValueBranchStep
     {
         public ValueBranchStep(string name, Func<TaskContext, CancellationToken, Task<TValue>> selector, IReadOnlyList<ValueBranchCase<TValue>> cases, TaskPipeline? defaultPipeline)
         {
@@ -434,6 +417,28 @@ public sealed class TaskPipeline
         public Func<TaskContext, CancellationToken, Task<TValue>> Selector { get; }
         public IReadOnlyList<ValueBranchCase<TValue>> Cases { get; }
         public TaskPipeline? DefaultPipeline { get; }
+
+        public async Task<IReadOnlyList<TaskExecutionResult>> ExecuteAsync(TaskContext context, int groupIndex, CancellationToken cancellationToken)
+        {
+            TValue selectedValue;
+            try
+            {
+                selectedValue = await Selector(context, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                return new[] { CreateBranchFailureResult(Name, groupIndex, ex) };
+            }
+
+            var selectedPipeline = Cases.FirstOrDefault(branchCase => EqualityComparer<TValue>.Default.Equals(branchCase.Value, selectedValue))?.Pipeline
+                ?? DefaultPipeline;
+
+            if (selectedPipeline == null)
+                return Array.Empty<TaskExecutionResult>();
+
+            var branchResult = await selectedPipeline.ExecuteAsync(context, cancellationToken).ConfigureAwait(false);
+            return branchResult.TaskResults;
+        }
     }
 
     private sealed class ValueBranchCase<TValue>
@@ -450,7 +455,7 @@ public sealed class TaskPipeline
 
     private sealed class PipelineStep
     {
-        private PipelineStep(TaskGroup? taskGroup, BranchStep? branch, object? valueBranch)
+        private PipelineStep(TaskGroup? taskGroup, BranchStep? branch, IValueBranchStep? valueBranch)
         {
             TaskGroupValue = taskGroup;
             BranchValue = branch;
@@ -459,7 +464,7 @@ public sealed class TaskPipeline
 
         public TaskGroup? TaskGroupValue { get; }
         public BranchStep? BranchValue { get; }
-        public object? ValueBranchValue { get; }
+        public IValueBranchStep? ValueBranchValue { get; }
         public static PipelineStep TaskGroup(TaskGroup taskGroup) => new PipelineStep(taskGroup, null, null);
         public static PipelineStep Branch(BranchStep branch) => new PipelineStep(null, branch, null);
         public static PipelineStep ValueBranch<TValue>(ValueBranchStep<TValue> branch) => new PipelineStep(null, null, branch);

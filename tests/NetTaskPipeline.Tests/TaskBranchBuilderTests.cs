@@ -146,7 +146,9 @@ public sealed class TaskBranchBuilderTests
     public void AddBranch_WithNullConfigure_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new TaskPipeline().AddBranch(ctx => ctx.Get<string>("CustomerType"), null!));
+            new TaskPipeline().AddBranch(
+                (Func<TaskContext, string>)(ctx => ctx.Get<string>("CustomerType")),
+                (Action<TaskBranchBuilder<string>>)null!));
     }
 
     [Fact]

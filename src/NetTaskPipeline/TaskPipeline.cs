@@ -22,11 +22,6 @@ public sealed class TaskPipeline
     {
     }
 
-    public TaskPipeline(IServiceProvider serviceProvider)
-    {
-        RegisterServiceProvider(serviceProvider);
-    }
-
     public TaskPipeline OnError(ErrorMode errorMode)
     {
         _errorMode = errorMode;

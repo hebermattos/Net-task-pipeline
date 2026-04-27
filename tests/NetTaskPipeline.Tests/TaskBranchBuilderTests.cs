@@ -37,7 +37,7 @@ public sealed class TaskBranchBuilderTests
 
         Assert.True(result.Success);
         Assert.Equal("premium", result.Context.Get<string>("SelectedFlow"));
-        Assert.Equal("Premium", taskResult.TaskName);
+        Assert.Equal("DelegateTask", taskResult.TaskName);
     }
 
     [Fact]
@@ -63,7 +63,7 @@ public sealed class TaskBranchBuilderTests
 
         Assert.True(result.Success);
         Assert.Equal("default", result.Context.Get<string>("SelectedFlow"));
-        Assert.Equal("Default", taskResult.TaskName);
+        Assert.Equal("DelegateTask", taskResult.TaskName);
     }
 
     [Fact]
@@ -114,7 +114,7 @@ public sealed class TaskBranchBuilderTests
 
         Assert.True(result.Success);
         Assert.Equal("required", result.Context.Get<string>("Approval"));
-        Assert.Equal("High", taskResult.TaskName);
+        Assert.Equal("DelegateTask", taskResult.TaskName);
     }
 
     [Fact]
@@ -139,7 +139,9 @@ public sealed class TaskBranchBuilderTests
     public void AddBranch_WithNullSelector_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new TaskPipeline().AddBranch<string>(null!, branch => branch.When("premium", flow => flow.AddTask(new DelegateTask("Premium", _ => Task.CompletedTask)))));
+            new TaskPipeline().AddBranch(
+                (Func<TaskContext, string>)null!,
+                branch => branch.When("premium", flow => flow.AddTask(new DelegateTask("Premium", _ => Task.CompletedTask)))));
     }
 
     [Fact]

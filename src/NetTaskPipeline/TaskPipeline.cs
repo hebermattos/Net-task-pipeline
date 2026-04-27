@@ -101,36 +101,6 @@ public sealed class TaskPipeline
         return this;
     }
 
-    public TaskPipeline AddBranch(Func<TaskContext, bool> condition, Action<TaskPipeline> whenTrue, Action<TaskPipeline>? whenFalse = null, string? name = null)
-    {
-        if (condition == null)
-            throw new ArgumentNullException(nameof(condition));
-
-        return AddBranch((context, _) => Task.FromResult(condition(context)), whenTrue, whenFalse, name);
-    }
-
-    public TaskPipeline AddBranch(Func<TaskContext, CancellationToken, Task<bool>> condition, Action<TaskPipeline> whenTrue, Action<TaskPipeline>? whenFalse = null, string? name = null)
-    {
-        if (condition == null)
-            throw new ArgumentNullException(nameof(condition));
-
-        if (whenTrue == null)
-            throw new ArgumentNullException(nameof(whenTrue));
-
-        var truePipeline = CreateChildPipeline();
-        whenTrue(truePipeline);
-
-        TaskPipeline? falsePipeline = null;
-        if (whenFalse != null)
-        {
-            falsePipeline = CreateChildPipeline();
-            whenFalse(falsePipeline);
-        }
-
-        _steps.Add(PipelineStep.Branch(new BranchStep(name ?? "Conditional branch", condition, truePipeline, falsePipeline)));
-        return this;
-    }
-
     public TaskPipeline AddBranch<TValue>(Func<TaskContext, TValue> selector, Action<TaskBranchBuilder<TValue>> configure, string? name = null)
     {
         if (selector == null)
@@ -188,11 +158,9 @@ public sealed class TaskPipeline
             var step = _steps[stepIndex];
             IReadOnlyList<TaskExecutionResult> stepResults = step.TaskGroupValue != null
                 ? await ExecuteTaskGroupStepAsync(step.TaskGroupValue, context, stepIndex, cancellationToken).ConfigureAwait(false)
-                : step.BranchValue != null
-                    ? await ExecuteBranchStepAsync(step.BranchValue, context, stepIndex, cancellationToken).ConfigureAwait(false)
-                    : step.ValueBranchValue != null
-                        ? await step.ValueBranchValue.ExecuteAsync(context, stepIndex, cancellationToken).ConfigureAwait(false)
-                        : Array.Empty<TaskExecutionResult>();
+                : step.ValueBranchValue != null
+                    ? await step.ValueBranchValue.ExecuteAsync(context, stepIndex, cancellationToken).ConfigureAwait(false)
+                    : Array.Empty<TaskExecutionResult>();
 
             allResults.AddRange(stepResults);
 
@@ -230,26 +198,6 @@ public sealed class TaskPipeline
 
         var result = await ExecuteTaskAsync(group.Tasks[0], context, groupIndex, cancellationToken, cancellationToken).ConfigureAwait(false);
         return new[] { result };
-    }
-
-    private async Task<IReadOnlyList<TaskExecutionResult>> ExecuteBranchStepAsync(BranchStep branch, TaskContext context, int groupIndex, CancellationToken cancellationToken)
-    {
-        bool conditionResult;
-        try
-        {
-            conditionResult = await branch.Condition(context, cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            return new[] { CreateBranchFailureResult(branch.Name, groupIndex, ex) };
-        }
-
-        var selectedPipeline = conditionResult ? branch.WhenTrue : branch.WhenFalse;
-        if (selectedPipeline == null)
-            return Array.Empty<TaskExecutionResult>();
-
-        var branchResult = await selectedPipeline.ExecuteAsync(context, cancellationToken).ConfigureAwait(false);
-        return branchResult.TaskResults;
     }
 
     private async Task<IReadOnlyList<TaskExecutionResult>> ExecuteParallelGroupAsync(TaskGroup group, TaskContext context, int groupIndex, CancellationToken cancellationToken)
@@ -382,22 +330,6 @@ public sealed class TaskPipeline
         public TimeSpan? Timeout { get; }
     }
 
-    private sealed class BranchStep
-    {
-        public BranchStep(string name, Func<TaskContext, CancellationToken, Task<bool>> condition, TaskPipeline whenTrue, TaskPipeline? whenFalse)
-        {
-            Name = name;
-            Condition = condition;
-            WhenTrue = whenTrue;
-            WhenFalse = whenFalse;
-        }
-
-        public string Name { get; }
-        public Func<TaskContext, CancellationToken, Task<bool>> Condition { get; }
-        public TaskPipeline WhenTrue { get; }
-        public TaskPipeline? WhenFalse { get; }
-    }
-
     private interface IValueBranchStep
     {
         Task<IReadOnlyList<TaskExecutionResult>> ExecuteAsync(TaskContext context, int groupIndex, CancellationToken cancellationToken);
@@ -455,19 +387,16 @@ public sealed class TaskPipeline
 
     private sealed class PipelineStep
     {
-        private PipelineStep(TaskGroup? taskGroup, BranchStep? branch, IValueBranchStep? valueBranch)
+        private PipelineStep(TaskGroup? taskGroup, IValueBranchStep? valueBranch)
         {
             TaskGroupValue = taskGroup;
-            BranchValue = branch;
             ValueBranchValue = valueBranch;
         }
 
         public TaskGroup? TaskGroupValue { get; }
-        public BranchStep? BranchValue { get; }
         public IValueBranchStep? ValueBranchValue { get; }
-        public static PipelineStep TaskGroup(TaskGroup taskGroup) => new PipelineStep(taskGroup, null, null);
-        public static PipelineStep Branch(BranchStep branch) => new PipelineStep(null, branch, null);
-        public static PipelineStep ValueBranch<TValue>(ValueBranchStep<TValue> branch) => new PipelineStep(null, null, branch);
+        public static PipelineStep TaskGroup(TaskGroup taskGroup) => new PipelineStep(taskGroup, null);
+        public static PipelineStep ValueBranch<TValue>(ValueBranchStep<TValue> branch) => new PipelineStep(null, branch);
     }
 
     private sealed class TaskGroup

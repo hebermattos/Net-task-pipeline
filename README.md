@@ -6,7 +6,7 @@
 
 A lightweight async task pipeline for .NET with sequential and parallel execution support.
 
-👉 Supports Dependency Injection (constructor injection built-in)
+👉 Supports Dependency Injection through fluent service provider registration
 
 ## Features
 
@@ -132,7 +132,7 @@ await new TaskPipeline()
 
 ### Dependency Injection
 
-If your tasks require constructor dependencies, register the service provider once and use the generic task methods normally:
+If your tasks require constructor dependencies, register the service provider with `WithServiceProvider(...)` once and use the generic task methods normally:
 
 ```csharp
 var services = new ServiceCollection();
@@ -148,21 +148,6 @@ await new TaskPipeline()
     .AddTask<LoadCustomerTask>()
     .AddTask<SendCustomerNotificationTask>()
     .ExecuteAsync();
-```
-
-You can also pass the service provider through the constructor:
-
-```csharp
-await new TaskPipeline(serviceProvider)
-    .AddTask<LoadCustomerTask>()
-    .ExecuteAsync();
-```
-
-The explicit provider overloads are still available:
-
-```csharp
-.AddTask<MyTask>(serviceProvider)
-.AddParallel<TaskA, TaskB>(serviceProvider)
 ```
 
 Tasks are resolved using:

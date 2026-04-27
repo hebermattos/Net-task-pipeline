@@ -132,26 +132,37 @@ await new TaskPipeline()
 
 ### Dependency Injection
 
-If your tasks require constructor dependencies, use the DI-enabled overloads:
-
-```csharp
-.AddTask<MyTask>(serviceProvider)
-.AddParallel<TaskA, TaskB>(serviceProvider)
-```
-
-Example:
+If your tasks require constructor dependencies, register the service provider once and use the generic task methods normally:
 
 ```csharp
 var services = new ServiceCollection();
 
 services.AddSingleton<ICustomerRepository, CustomerRepository>();
 services.AddTransient<LoadCustomerTask>();
+services.AddTransient<SendCustomerNotificationTask>();
 
-var serviceProvider = services.BuildServiceProvider();
+using var serviceProvider = services.BuildServiceProvider();
 
 await new TaskPipeline()
-    .AddTask<LoadCustomerTask>(serviceProvider)
+    .WithServiceProvider(serviceProvider)
+    .AddTask<LoadCustomerTask>()
+    .AddTask<SendCustomerNotificationTask>()
     .ExecuteAsync();
+```
+
+You can also pass the service provider through the constructor:
+
+```csharp
+await new TaskPipeline(serviceProvider)
+    .AddTask<LoadCustomerTask>()
+    .ExecuteAsync();
+```
+
+The explicit provider overloads are still available:
+
+```csharp
+.AddTask<MyTask>(serviceProvider)
+.AddParallel<TaskA, TaskB>(serviceProvider)
 ```
 
 Tasks are resolved using:

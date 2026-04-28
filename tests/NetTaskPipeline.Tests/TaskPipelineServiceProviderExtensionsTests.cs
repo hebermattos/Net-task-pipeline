@@ -146,6 +146,19 @@ public sealed class TaskPipelineServiceProviderExtensionsTests
     }
 
     [Fact]
+    public void AddTask_HasNoPublicServiceProviderOverload()
+    {
+        var addTaskServiceProviderMethods = typeof(TaskPipelineTaskExtensions)
+            .GetMethods(BindingFlags.Static | BindingFlags.Public)
+            .Where(method => method.Name == nameof(TaskPipelineTaskExtensions.AddTask))
+            .Where(method => method
+                .GetParameters()
+                .Any(parameter => parameter.ParameterType == typeof(IServiceProvider)));
+
+        Assert.Empty(addTaskServiceProviderMethods);
+    }
+
+    [Fact]
     public void TaskPipelineTaskExtensions_HasNoPublicServiceProviderParameters()
     {
         var serviceProviderMethods = typeof(TaskPipelineTaskExtensions)

@@ -1,4 +1,5 @@
 using System;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace NetTaskPipeline;
 
@@ -14,6 +15,10 @@ public static class TaskPipelineServiceProviderExtensions
         if (pipeline == null)
             throw new ArgumentNullException(nameof(pipeline));
 
-        return pipeline.RegisterServiceProvider(serviceProvider);
+        if (serviceProvider == null)
+            throw new ArgumentNullException(nameof(serviceProvider));
+
+        return pipeline.RegisterTaskFactory(taskType =>
+            (ITask)ActivatorUtilities.GetServiceOrCreateInstance(serviceProvider, taskType));
     }
 }

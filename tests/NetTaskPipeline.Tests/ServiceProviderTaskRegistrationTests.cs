@@ -12,7 +12,8 @@ public sealed class ServiceProviderTaskRegistrationTests
             .Add(typeof(RegisteredInjectedTask), new RegisteredInjectedTask());
 
         var result = await new TaskPipeline()
-            .AddTask<RegisteredInjectedTask>(serviceProvider)
+            .WithServiceProvider(serviceProvider)
+            .AddTask<RegisteredInjectedTask>()
             .ExecuteAsync();
 
         Assert.True(result.Success);
@@ -26,7 +27,8 @@ public sealed class ServiceProviderTaskRegistrationTests
             .Add(typeof(ITestMessageProvider), new TestMessageProvider("resolved from service provider"));
 
         var result = await new TaskPipeline()
-            .AddTask<ConstructorInjectedTask>(serviceProvider)
+            .WithServiceProvider(serviceProvider)
+            .AddTask<ConstructorInjectedTask>()
             .ExecuteAsync();
 
         Assert.True(result.Success);

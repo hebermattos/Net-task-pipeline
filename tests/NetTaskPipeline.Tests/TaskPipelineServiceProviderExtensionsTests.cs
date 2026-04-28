@@ -129,6 +129,35 @@ public sealed class TaskPipelineServiceProviderExtensionsTests
     }
 
     [Fact]
+    public void TaskPipeline_HasNoServiceProviderStateOrRegistrationMethod()
+    {
+        var serviceProviderFields = typeof(TaskPipeline)
+            .GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+            .Where(field => typeof(IServiceProvider).IsAssignableFrom(field.FieldType));
+
+        var serviceProviderMethods = typeof(TaskPipeline)
+            .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+            .Where(method => method
+                .GetParameters()
+                .Any(parameter => parameter.ParameterType == typeof(IServiceProvider)));
+
+        Assert.Empty(serviceProviderFields);
+        Assert.Empty(serviceProviderMethods);
+    }
+
+    [Fact]
+    public void TaskPipelineTaskExtensions_HasNoPublicServiceProviderParameters()
+    {
+        var serviceProviderMethods = typeof(TaskPipelineTaskExtensions)
+            .GetMethods(BindingFlags.Static | BindingFlags.Public)
+            .Where(method => method
+                .GetParameters()
+                .Any(parameter => parameter.ParameterType == typeof(IServiceProvider)));
+
+        Assert.Empty(serviceProviderMethods);
+    }
+
+    [Fact]
     public void TaskPipelineServiceProviderExtensions_HasOnlyWithServiceProviderPublicMethodForServiceProviderRegistration()
     {
         var serviceProviderRegistrationMethods = typeof(TaskPipelineServiceProviderExtensions)

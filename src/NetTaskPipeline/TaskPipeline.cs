@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace NetTaskPipeline;
 
@@ -12,7 +11,7 @@ namespace NetTaskPipeline;
 public sealed class TaskPipeline
 {
     private readonly List<PipelineStep> _steps = new List<PipelineStep>();
-    private IServiceProvider? _serviceProvider;
+    private Func<Type, ITask>? _taskFactory;
     private ErrorMode _errorMode = ErrorMode.StopOnFirstError;
     private int _defaultRetryCount;
     private TimeSpan? _defaultTimeout;
@@ -55,16 +54,16 @@ public sealed class TaskPipeline
         return this;
     }
 
-    internal TaskPipeline RegisterServiceProvider(IServiceProvider serviceProvider)
+    internal TaskPipeline RegisterTaskFactory(Func<Type, ITask> taskFactory)
     {
-        _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+        _taskFactory = taskFactory ?? throw new ArgumentNullException(nameof(taskFactory));
         return this;
     }
 
     internal TTask CreateTask<TTask>() where TTask : ITask
     {
-        return _serviceProvider != null
-            ? ActivatorUtilities.GetServiceOrCreateInstance<TTask>(_serviceProvider)
+        return _taskFactory != null
+            ? (TTask)_taskFactory(typeof(TTask))
             : Activator.CreateInstance<TTask>();
     }
 
@@ -181,7 +180,7 @@ public sealed class TaskPipeline
             _defaultRetryCount = _defaultRetryCount,
             _defaultTimeout = _defaultTimeout,
             _maxDegreeOfParallelism = _maxDegreeOfParallelism,
-            _serviceProvider = _serviceProvider
+            _taskFactory = _taskFactory
         };
     }
 

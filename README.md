@@ -132,9 +132,12 @@ await new TaskPipeline()
 
 ### Dependency Injection
 
-If your tasks require constructor dependencies, register the service provider with `WithServiceProvider(...)` once and use the generic task methods normally:
+If your tasks require constructor dependencies, register the service provider with `WithServiceProvider(...)` once and use the generic task methods normally. Do not pass the service provider to `AddTask`.
 
 ```csharp
+using Microsoft.Extensions.DependencyInjection;
+using NetTaskPipeline;
+
 var services = new ServiceCollection();
 
 services.AddSingleton<ICustomerRepository, CustomerRepository>();
@@ -150,10 +153,10 @@ await new TaskPipeline()
     .ExecuteAsync();
 ```
 
-Tasks are resolved using:
+Tasks are resolved internally using:
 
 ```csharp
-ActivatorUtilities.GetServiceOrCreateInstance<TTask>(serviceProvider)
+ActivatorUtilities.GetServiceOrCreateInstance(serviceProvider, taskType)
 ```
 
 ## Shared context

@@ -2,7 +2,7 @@
 
 [![build](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/build.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/build.yml)
 [![tests](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml)
-[![coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/hebermattos/Net-task-pipeline/main/coverage-badge.json)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml)
+[![coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/hebermattos/NetTaskPipeline/main/coverage-badge.json)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml)
 
 A lightweight async task pipeline for .NET with sequential and parallel execution support.
 
@@ -24,7 +24,7 @@ A lightweight async task pipeline for .NET with sequential and parallel executio
 - Error handling modes
 - Execution result reporting
 - Maximum degree of parallelism for parallel groups
-- Runnable simple, advanced, branching, and RabbitMQ RPC Docker examples
+- Runnable simple, advanced, branching, HTTP, and RabbitMQ RPC Docker examples
 
 ## Basic usage
 
@@ -378,6 +378,8 @@ var result = await new TaskPipeline()
 var healthStatus = result.Context.Get<string>("HealthStatus");
 ```
 
+See `examples/HttpExample` for a runnable example that calls two public APIs.
+
 ```csharp
 public sealed class GetCustomerRequest
 {
@@ -482,6 +484,7 @@ The repository includes runnable examples.
 dotnet run --project examples/SimpleExample/SimpleExample.csproj
 dotnet run --project examples/AdvancedExample/AdvancedExample.csproj
 dotnet run --project examples/BranchingExample/BranchingExample.csproj
+dotnet run --project examples/HttpExample/HttpExample.csproj
 ```
 
 The RabbitMQ RPC Docker example can be started with Docker Compose:

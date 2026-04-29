@@ -14,7 +14,8 @@ A lightweight async task pipeline for .NET with sequential and parallel executio
 - Parallel task groups
 - Generic task registration with `AddTask<TTask>()`
 - Inline task registration with delegate-based `AddTask(...)` overloads
-- RabbitMQ RPC task execution with `AddTaskRpc<TRequest, TResponse>(requestName)`
+- RabbitMQ RPC task execution with delegate-based `AddTaskRpc<TRequest, TResponse>(...)`
+- HTTP task execution with delegate-based `AddTaskHttp<TRequest, TResponse>(...)`
 - Fluent context-based branching
 - Shared execution context
 - Cancellation support
@@ -161,7 +162,7 @@ ActivatorUtilities.GetServiceOrCreateInstance(serviceProvider, taskType)
 
 ## Shared context
 
-Every pipeline execution uses a `TaskContext`. The same context instance is passed to each task, so values written by one task can be read by later tasks, branch selectors, and RabbitMQ RPC tasks.
+Every pipeline execution uses a `TaskContext`. The same context instance is passed to each task, so values written by one task can be read by later tasks, branch selectors, RabbitMQ RPC tasks, and HTTP tasks.
 
 When `ExecuteAsync()` is called without arguments, the pipeline creates a new empty context. When the caller needs to provide initial data, create a `TaskContext` and pass it to `ExecuteAsync(context)`.
 
@@ -299,30 +300,82 @@ await new TaskPipeline()
 
 ## Context usage with RabbitMQ RPC tasks
 
-Use `AddTaskRpc<TRequest, TResponse>(requestName)` when the pipeline needs to send a typed RabbitMQ RPC request. The request name is used to read the request object from `TaskContext` and is also used as the RabbitMQ queue name.
+Use `AddTaskRpc<TRequest, TResponse>(requestFactory, configure)` when the pipeline needs to send a typed RabbitMQ RPC request.
 
 ```csharp
+using NetTaskPipeline;
+
 var context = new TaskContext();
-context.Set("CustomerRequest", new GetCustomerRequest
-{
-    CustomerId = 123
-});
 
 var result = await new TaskPipeline()
-    .AddTaskRpc<GetCustomerRequest, GetCustomerResponse>("CustomerRequest")
+    .AddTaskRpc<GetCustomerRequest, GetCustomerResponse>(
+        ctx => new GetCustomerRequest
+        {
+            CustomerId = ctx.Get<int>("CustomerId")
+        },
+        options =>
+        {
+            options.ConnectionUri = "amqp://guest:guest@localhost:5672/";
+            options.RoutingKey = "CustomerRequest";
+            options.ResponseKey = "CustomerResponse";
+        })
     .ExecuteAsync(context);
 ```
 
-The RabbitMQ RPC response is deserialized as `TResponse` and stored automatically using the same request name plus `Response`.
+The RabbitMQ RPC response is deserialized as `TResponse` and stored automatically using the configured `ResponseKey`.
 
 ```csharp
-var response = result.Context.Get<GetCustomerResponse>("CustomerRequestResponse");
+var response = result.Context.Get<GetCustomerResponse>("CustomerResponse");
 ```
 
-By default, the RabbitMQ connection is read from the `NET_TASK_PIPELINE_RPC_URI` environment variable. If the variable is not set, the local development connection is used.
+## Context usage with HTTP tasks
 
-```bash
-NET_TASK_PIPELINE_RPC_URI=amqp://guest:guest@localhost:5672/
+Use `AddTaskHttp<TRequest, TResponse>(requestFactory, configure)` when the pipeline needs to send a typed HTTP request and store the typed response in the shared context.
+
+```csharp
+using System.Net.Http;
+using NetTaskPipeline;
+
+var context = new TaskContext();
+context.Set("CustomerId", 123);
+
+var result = await new TaskPipeline()
+    .AddTaskHttp<GetCustomerRequest, GetCustomerResponse>(
+        ctx => new GetCustomerRequest
+        {
+            CustomerId = ctx.Get<int>("CustomerId")
+        },
+        options =>
+        {
+            options.RequestUri = "https://api.example.com/customers";
+            options.Method = HttpMethod.Post;
+            options.ResponseKey = "CustomerResponse";
+            options.Headers["x-api-key"] = "secret";
+        })
+    .ExecuteAsync(context);
+```
+
+The HTTP response is deserialized as `TResponse` and stored automatically using the configured `ResponseKey`.
+
+```csharp
+var response = result.Context.Get<GetCustomerResponse>("CustomerResponse");
+```
+
+When the endpoint returns plain text, use `string` as the response type.
+
+```csharp
+var result = await new TaskPipeline()
+    .AddTaskHttp<object, string>(
+        _ => new object(),
+        options =>
+        {
+            options.RequestUri = "https://api.example.com/health";
+            options.Method = HttpMethod.Get;
+            options.ResponseKey = "HealthStatus";
+        })
+    .ExecuteAsync();
+
+var healthStatus = result.Context.Get<string>("HealthStatus");
 ```
 
 ```csharp

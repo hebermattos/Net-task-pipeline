@@ -13,8 +13,9 @@ var context = new TaskContext();
 context.Set("CustomerId", 123);
 
 var result = await new TaskPipeline()
-    .AddTask<LoadCustomerTask>(serviceProvider)
-    .AddTask<SendCustomerNotificationTask>(serviceProvider)
+    .WithServiceProvider(serviceProvider)
+    .AddTask<LoadCustomerTask>()
+    .AddTask<SendCustomerNotificationTask>()
     .ExecuteAsync(context);
 
 Console.WriteLine($"Pipeline success: {result.Success}");

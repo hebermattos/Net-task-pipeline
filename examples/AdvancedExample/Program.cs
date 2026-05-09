@@ -13,8 +13,8 @@ var result = await new TaskPipeline()
     .WithMaxDegreeOfParallelism(2)
     .AddTask<LoadOrderTask>(name: "Load order")
     .AddParallel<CalculateTotalsTask, GenerateInvoiceTask, SendNotificationTask>()
-    .AddTask<UnstableExternalApiTask>(retryCount: 2, timeout: TimeSpan.FromSeconds(3), name: "External API with retry")
-    .AddTask<TimeoutTask>(timeout: TimeSpan.FromSeconds(1), name: "Task with timeout")
+    .AddTask<UnstableExternalApiTask>(retryCount: 2, timeout: TimeSpan.FromSeconds(30), name: "External API with retry")
+    .AddTask<TimeoutTask>(timeout: TimeSpan.FromSeconds(5), name: "Task with timeout")
     .AddTask<FinalizeOrderTask>(name: "Finalize order")
     .ExecuteAsync(context);
 
@@ -121,7 +121,7 @@ public sealed class TimeoutTask : ITask
 {
     public async Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
     {
-        Console.WriteLine("Starting a task that will exceed its timeout.");
+        Console.WriteLine("long task");
 
         await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
     }

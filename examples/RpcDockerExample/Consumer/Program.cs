@@ -63,6 +63,7 @@ static async Task RegisterRpcHandlerAsync<TRequest, TResponse>(
         try
         {
             var requestJson = Encoding.UTF8.GetString(eventArgs.Body.ToArray());
+            
             var request = JsonSerializer.Deserialize<TRequest>(requestJson)
                 ?? throw new InvalidOperationException("Invalid request payload.");
 

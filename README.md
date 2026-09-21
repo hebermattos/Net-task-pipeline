@@ -1,7 +1,6 @@
 # NetTaskPipeline: Async Task Pipeline for .NET
 
-[![build](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/build.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/build.yml)
-[![tests](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml)
+[![build and tests](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml)
 ![coverage](https://img.shields.io/badge/coverage-%E2%89%A580%25-green)
 
 A lightweight async task pipeline for .NET with sequential and parallel execution support.

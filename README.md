@@ -441,6 +441,18 @@ await new TaskPipeline()
     .ExecuteAsync();
 ```
 
+Configure an optional delay between retries. Exponential backoff keeps the first delay unchanged and doubles it for each subsequent retry:
+
+```csharp
+await new TaskPipeline()
+    .WithRetry(3)
+    .WithRetryDelay(TimeSpan.FromMilliseconds(250), exponentialBackoff: true)
+    .AddTask<CallExternalApiTask>()
+    .ExecuteAsync();
+```
+
+Without `WithRetryDelay`, retries remain immediate for backward compatibility.
+
 Per-task retry:
 
 ```csharp

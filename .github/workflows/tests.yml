@@ -1,4 +1,4 @@
-name: tests
+name: build-and-tests
 
 on:
   push:
@@ -29,6 +29,9 @@ jobs:
 
       - name: Build
         run: dotnet build TaskPipeline.sln --configuration Release --no-restore
+
+      - name: Pack
+        run: dotnet pack src/NetTaskPipeline/NetTaskPipeline.csproj --configuration Release --no-build --output artifacts/packages
 
       - name: Test with coverage
         run: dotnet test tests/NetTaskPipeline.Tests/NetTaskPipeline.Tests.csproj --configuration Release --no-build --collect:"XPlat Code Coverage"

@@ -209,7 +209,7 @@ public sealed class TaskPipeline
         if (group.IsParallel)
             return await ExecuteParallelGroupAsync(group, context, groupIndex, cancellationToken).ConfigureAwait(false);
 
-        var result = await ExecuteTaskAsync(group.Tasks[0], context, groupIndex, cancellationToken, cancellationToken).ConfigureAwait(false);
+        var result = await TaskExecutionEngine.ExecuteAsync(group.Tasks[0].Task, group.Tasks[0].Name, groupIndex, group.Tasks[0].RetryCount ?? _defaultRetryCount, group.Tasks[0].Timeout ?? _defaultTimeout, _retryDelay, context, cancellationToken, cancellationToken).ConfigureAwait(false);
         return new[] { result };
     }
 
@@ -227,7 +227,7 @@ public sealed class TaskPipeline
                 if (groupCancellationTokenSource.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
                     return TaskExecutionResult.Skipped(pipelineTask.Name, groupIndex);
 
-                var result = await ExecuteTaskAsync(pipelineTask, context, groupIndex, cancellationToken, groupCancellationTokenSource.Token).ConfigureAwait(false);
+                var result = await TaskExecutionEngine.ExecuteAsync(pipelineTask.Task, pipelineTask.Name, groupIndex, pipelineTask.RetryCount ?? _defaultRetryCount, pipelineTask.Timeout ?? _defaultTimeout, _retryDelay, context, cancellationToken, groupCancellationTokenSource.Token).ConfigureAwait(false);
 
                 if (_errorMode == ErrorMode.StopOnFirstError && !result.Success)
                     groupCancellationTokenSource.Cancel();
@@ -241,72 +241,6 @@ public sealed class TaskPipeline
         });
 
         return await Task.WhenAll(executions).ConfigureAwait(false);
-    }
-
-    private async Task<TaskExecutionResult> ExecuteTaskAsync(PipelineTask pipelineTask, TaskContext context, int groupIndex, CancellationToken rootCancellationToken, CancellationToken executionCancellationToken)
-    {
-        var stopwatch = Stopwatch.StartNew();
-        var startedAt = DateTimeOffset.UtcNow;
-        var retryCount = pipelineTask.RetryCount ?? _defaultRetryCount;
-        var timeout = pipelineTask.Timeout ?? _defaultTimeout;
-        var maxAttempts = retryCount + 1;
-        Exception? lastException = null;
-        var status = TaskExecutionStatus.Failed;
-        var attempts = 0;
-
-        for (var attempt = 1; attempt <= maxAttempts; attempt++)
-        {
-            attempts = attempt;
-            rootCancellationToken.ThrowIfCancellationRequested();
-
-            if (attempt > 1 && _retryDelay != null)
-            {
-                var delay = _retryDelay(attempt - 1);
-                if (delay > TimeSpan.Zero)
-                    await Task.Delay(delay, rootCancellationToken).ConfigureAwait(false);
-            }
-
-            using var timeoutCancellationTokenSource = CreateTimeoutCancellationTokenSource(executionCancellationToken, timeout);
-            try
-            {
-                await pipelineTask.Task.ExecuteAsync(context, timeoutCancellationTokenSource.Token).ConfigureAwait(false);
-                status = TaskExecutionStatus.Success;
-                lastException = null;
-                break;
-            }
-            catch (OperationCanceledException ex) when (!rootCancellationToken.IsCancellationRequested)
-            {
-                if (timeoutCancellationTokenSource.IsCancellationRequested && !executionCancellationToken.IsCancellationRequested)
-                {
-                    lastException = new TimeoutException($"The task '{pipelineTask.Name}' exceeded the configured timeout of {timeout}.", ex);
-                    status = TaskExecutionStatus.Failed;
-                }
-                else
-                {
-                    lastException = ex;
-                    status = TaskExecutionStatus.Canceled;
-                    break;
-                }
-            }
-            catch (Exception ex)
-            {
-                lastException = ex;
-                status = TaskExecutionStatus.Failed;
-            }
-        }
-
-        stopwatch.Stop();
-        return new TaskExecutionResult
-        {
-            TaskName = pipelineTask.Name,
-            GroupIndex = groupIndex,
-            Attempts = attempts,
-            Status = status,
-            Exception = lastException,
-            Duration = stopwatch.Elapsed,
-            StartedAt = startedAt,
-            FinishedAt = DateTimeOffset.UtcNow
-        };
     }
 
     private static TaskExecutionResult CreateBranchFailureResult(string branchName, int groupIndex, Exception exception)
@@ -323,15 +257,6 @@ public sealed class TaskPipeline
             StartedAt = now,
             FinishedAt = now
         };
-    }
-
-    private static CancellationTokenSource CreateTimeoutCancellationTokenSource(CancellationToken cancellationToken, TimeSpan? timeout)
-    {
-        var cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        if (timeout.HasValue)
-            cancellationTokenSource.CancelAfter(timeout.Value);
-
-        return cancellationTokenSource;
     }
 
     private sealed class PipelineTask

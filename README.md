@@ -2,7 +2,7 @@
 
 [![build](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/build.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/build.yml)
 [![tests](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml)
-[![coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/hebermattos/Net-task-pipeline/main/coverage-badge.json)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml)
+![coverage](https://img.shields.io/badge/coverage-%E2%89%A580%25-green)
 
 A lightweight async task pipeline for .NET with sequential and parallel execution support.
 
@@ -20,6 +20,7 @@ A lightweight async task pipeline for .NET with sequential and parallel executio
 - Shared execution context
 - Cancellation support
 - Retry support
+- CI-enforced minimum 80% line coverage
 - Timeout support
 - Error handling modes
 - Execution result reporting
@@ -493,6 +494,20 @@ The RabbitMQ RPC Docker example can be started with Docker Compose:
 cd examples/RpcDockerExample
 docker compose up --build
 ```
+
+## Development
+
+Pull requests must keep line coverage at or above 80%. Code changes should update affected tests, examples, and this README when behavior or public APIs change. Project documentation is intentionally kept in this main README.
+
+### Dependency Injection example
+
+Run the dependency injection example from the repository root:
+
+```bash
+dotnet run --project examples/DependencyInjectionExample/DependencyInjectionExample.csproj
+```
+
+Register task dependencies with `Microsoft.Extensions.DependencyInjection`, build the service provider, and configure the pipeline once with `WithServiceProvider(serviceProvider)`. Typed tasks are then resolved through `ActivatorUtilities.GetServiceOrCreateInstance`, including tasks inside parallel groups and branches.
 
 ## License
 

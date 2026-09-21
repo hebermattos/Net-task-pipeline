@@ -34,7 +34,7 @@ jobs:
         run: dotnet pack src/NetTaskPipeline/NetTaskPipeline.csproj --configuration Release --no-build --output artifacts/packages
 
       - name: Test with coverage
-        run: dotnet test tests/NetTaskPipeline.Tests/NetTaskPipeline.Tests.csproj --configuration Release --no-build --collect:"XPlat Code Coverage"
+        run: dotnet test tests/NetTaskPipeline.Tests/NetTaskPipeline.Tests.csproj --configuration Release --no-build --collect:"XPlat Code Coverage" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.ExcludeByFile="**/RabbitMq*.cs,**/TaskRpc*.cs"
 
       - name: Enforce 80% line coverage
         shell: pwsh

@@ -330,6 +330,39 @@ public sealed class TaskPipelineTests
     }
 
     [Fact]
+    public void WithRetryDelay_WithNegativeDelay_ThrowsArgumentOutOfRangeException()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new TaskPipeline().WithRetryDelay(TimeSpan.FromMilliseconds(-1)));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithRetryDelay_DelaysRetry()
+    {
+        var attempts = 0;
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        var result = await new TaskPipeline()
+            .WithRetry(1)
+            .WithRetryDelay(TimeSpan.FromMilliseconds(50))
+            .AddTask(new DelegateTask("Unstable", _ =>
+            {
+                attempts++;
+                if (attempts == 1)
+                    throw new InvalidOperationException("Temporary failure.");
+
+                return Task.CompletedTask;
+            }))
+            .ExecuteAsync();
+
+        stopwatch.Stop();
+
+        Assert.True(result.Success);
+        Assert.Equal(2, attempts);
+        Assert.True(stopwatch.Elapsed >= TimeSpan.FromMilliseconds(40));
+    }
+
+    [Fact]
     public void WithTimeout_WithZeroTimeout_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new TaskPipeline().WithTimeout(TimeSpan.Zero));

@@ -1,8 +1,7 @@
 # NetTaskPipeline: Async Task Pipeline for .NET
 
-[![build](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/build.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/build.yml)
-[![tests](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml)
-[![coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/hebermattos/Net-task-pipeline/main/coverage-badge.json)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml)
+[![build and tests](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml)
+![coverage](https://img.shields.io/badge/coverage-%E2%89%A580%25-green)
 
 A lightweight async task pipeline for .NET with sequential and parallel execution support.
 
@@ -20,6 +19,7 @@ A lightweight async task pipeline for .NET with sequential and parallel executio
 - Shared execution context
 - Cancellation support
 - Retry support
+- CI-enforced minimum 80% line coverage
 - Timeout support
 - Error handling modes
 - Execution result reporting
@@ -440,6 +440,18 @@ await new TaskPipeline()
     .ExecuteAsync();
 ```
 
+Configure an optional delay between retries. Exponential backoff keeps the first delay unchanged and doubles it for each subsequent retry:
+
+```csharp
+await new TaskPipeline()
+    .WithRetry(3)
+    .WithRetryDelay(TimeSpan.FromMilliseconds(250), exponentialBackoff: true)
+    .AddTask<CallExternalApiTask>()
+    .ExecuteAsync();
+```
+
+Without `WithRetryDelay`, retries remain immediate for backward compatibility.
+
 Per-task retry:
 
 ```csharp
@@ -493,6 +505,20 @@ The RabbitMQ RPC Docker example can be started with Docker Compose:
 cd examples/RpcDockerExample
 docker compose up --build
 ```
+
+## Development
+
+Pull requests must keep line coverage at or above 80% for unit-testable code. RabbitMQ transport/RPC files are integration-bound and excluded from the unit coverage gate; their integration validation remains separate. Code changes should update affected tests, examples, and this README when behavior or public APIs change. Project documentation is intentionally kept in this main README.
+
+### Dependency Injection example
+
+Run the dependency injection example from the repository root:
+
+```bash
+dotnet run --project examples/DependencyInjectionExample/DependencyInjectionExample.csproj
+```
+
+Register task dependencies with `Microsoft.Extensions.DependencyInjection`, build the service provider, and configure the pipeline once with `WithServiceProvider(serviceProvider)`. Typed tasks are then resolved through `ActivatorUtilities.GetServiceOrCreateInstance`, including tasks inside parallel groups and branches.
 
 ## License
 

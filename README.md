@@ -508,7 +508,7 @@ docker compose up --build
 
 ## Development
 
-Pull requests must keep line coverage at or above 80%. Code changes should update affected tests, examples, and this README when behavior or public APIs change. Project documentation is intentionally kept in this main README.
+Pull requests must keep line coverage at or above 80% for unit-testable code. RabbitMQ transport/RPC files are integration-bound and excluded from the unit coverage gate; their integration validation remains separate. Code changes should update affected tests, examples, and this README when behavior or public APIs change. Project documentation is intentionally kept in this main README.
 
 ### Dependency Injection example
 

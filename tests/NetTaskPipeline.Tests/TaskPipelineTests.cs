@@ -566,6 +566,36 @@ public sealed class TaskPipelineTests
         Assert.Equal(2, context.Get<int>("Value"));
     }
 
+    [Fact]
+    public void TaskContext_Remove_RemovesExistingValue()
+    {
+        var context = new TaskContext();
+        context.Set("Value", 1);
+
+        Assert.True(context.Remove("Value"));
+        Assert.False(context.ContainsKey("Value"));
+    }
+
+    [Fact]
+    public void TaskContext_GetOrAdd_AddsValueOnlyOnce()
+    {
+        var context = new TaskContext();
+
+        var first = context.GetOrAdd("Value", _ => 42);
+        var second = context.GetOrAdd("Value", _ => 99);
+
+        Assert.Equal(42, first);
+        Assert.Equal(42, second);
+    }
+
+    [Fact]
+    public void TaskContext_GetOrAdd_WithNullFactory_ThrowsArgumentNullException()
+    {
+        var context = new TaskContext();
+
+        Assert.Throws<ArgumentNullException>(() => context.GetOrAdd<int>("Value", null!));
+    }
+
     private static void UpdateMax(ref int target, int value)
     {
         int initialValue;

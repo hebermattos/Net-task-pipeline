@@ -14,6 +14,7 @@ public sealed class TaskPipeline
     private Func<Type, ITask>? _taskFactory;
     private ErrorMode _errorMode = ErrorMode.StopOnFirstError;
     private int _defaultRetryCount;
+    private Func<int, TimeSpan>? _retryDelay;
     private TimeSpan? _defaultTimeout;
     private int? _maxDegreeOfParallelism;
 
@@ -33,6 +34,17 @@ public sealed class TaskPipeline
             throw new ArgumentOutOfRangeException(nameof(retryCount), "Retry count cannot be negative.");
 
         _defaultRetryCount = retryCount;
+        return this;
+    }
+
+    public TaskPipeline WithRetryDelay(TimeSpan delay, bool exponentialBackoff = false)
+    {
+        if (delay < TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(delay), "Retry delay cannot be negative.");
+
+        _retryDelay = exponentialBackoff
+            ? attempt => TimeSpan.FromTicks(delay.Ticks * (1L << Math.Min(attempt - 1, 20)))
+            : _ => delay;
         return this;
     }
 
@@ -178,6 +190,7 @@ public sealed class TaskPipeline
         {
             _errorMode = _errorMode,
             _defaultRetryCount = _defaultRetryCount,
+            _retryDelay = _retryDelay,
             _defaultTimeout = _defaultTimeout,
             _maxDegreeOfParallelism = _maxDegreeOfParallelism,
             _taskFactory = _taskFactory
@@ -245,6 +258,13 @@ public sealed class TaskPipeline
         {
             attempts = attempt;
             rootCancellationToken.ThrowIfCancellationRequested();
+
+            if (attempt > 1 && _retryDelay != null)
+            {
+                var delay = _retryDelay(attempt - 1);
+                if (delay > TimeSpan.Zero)
+                    await Task.Delay(delay, rootCancellationToken).ConfigureAwait(false);
+            }
 
             using var timeoutCancellationTokenSource = CreateTimeoutCancellationTokenSource(executionCancellationToken, timeout);
             try

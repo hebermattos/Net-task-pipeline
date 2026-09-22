@@ -1,78 +1,58 @@
-# NetTaskPipeline: Async Task Pipeline for .NET
+# NetTaskPipeline
 
 [![NuGet](https://img.shields.io/nuget/v/NetTaskPipeline.svg)](https://www.nuget.org/packages/NetTaskPipeline)
 [![examples](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/examples.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/examples.yml)
 [![build and tests](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml)
 ![coverage](https://img.shields.io/badge/coverage-%E2%89%A580%25-green)
 
-A lightweight async task pipeline for .NET with sequential and parallel execution support.
+A lightweight async task pipeline for .NET with sequential and parallel execution, branching, retries, timeouts, Dependency Injection, HTTP tasks, and RabbitMQ RPC.
 
-👉 Supports Dependency Injection through fluent service provider registration
+## Installation
 
-## Features
+```bash
+dotnet add package NetTaskPipeline
+```
 
-- Sequential task execution
-- Parallel task groups
-- Generic task registration with `AddTask<TTask>()`
-- Inline task registration with delegate-based `AddTask(...)` overloads
-- RabbitMQ RPC task execution with delegate-based `AddTaskRpc<TRequest, TResponse>(...)`
-- HTTP task execution with delegate-based `AddTaskHttp<TRequest, TResponse>(...)`
-- Fluent context-based branching
-- Shared execution context
-- Cancellation support
-- Retry support
-- CI-enforced minimum 80% line coverage
-- Timeout support
-- Error handling modes
-- Execution result reporting
-- Maximum degree of parallelism for parallel groups
-- Runnable simple, advanced, branching, HTTP, and RabbitMQ RPC Docker examples
-
-## Basic usage
+## Quick start
 
 ```csharp
 using NetTaskPipeline;
 
 var result = await new TaskPipeline()
-    .OnError(ErrorMode.StopOnFirstError)
-    .WithRetry(2)
-    .WithTimeout(TimeSpan.FromSeconds(10))
-    .WithMaxDegreeOfParallelism(3)
-    .AddTask<ValidateCustomerTask>()
-    .AddParallel<GeneratePdfTask, SendEmailTask, SaveLogTask>()
+    .AddTask("Load customer", context =>
+    {
+        context.Set("CustomerId", 123);
+        return Task.CompletedTask;
+    })
+    .AddTask("Process customer", context =>
+    {
+        Console.WriteLine(context.Get<int>("CustomerId"));
+        return Task.CompletedTask;
+    })
     .ExecuteAsync();
 
 Console.WriteLine($"Pipeline success: {result.Success}");
 ```
 
-## Creating a task
+## Capabilities
 
-```csharp
-using NetTaskPipeline;
+| Capability | API |
+| --- | --- |
+| Sequential tasks | `AddTask(...)` / `AddTask<TTask>()` |
+| Parallel tasks | `AddParallel<...>()` |
+| Branching | `AddBranch(...)` |
+| Shared state | `TaskContext` |
+| Retry | `WithRetry(...)` / per-task `retryCount` |
+| Retry delay/backoff | `WithRetryDelay(...)` |
+| Timeout | `WithTimeout(...)` / per-task `timeout` |
+| Error handling | `OnError(...)` |
+| Dependency Injection | `WithServiceProvider(...)` |
+| HTTP | `AddTaskHttp<...>()` |
+| RabbitMQ RPC | `AddTaskRpc<...>()` |
 
-public sealed class ValidateCustomerTask : ITask
-{
-    public async Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
-    {
-        await Task.Delay(500, cancellationToken);
+## Core execution
 
-        context.Set("CustomerId", 123);
-    }
-}
-```
-
-## Generic task registration
-
-Use `AddTask<TTask>()` to add a sequential task without creating the instance manually.
-
-```csharp
-await new TaskPipeline()
-    .AddTask<ValidateCustomerTask>()
-    .AddTask<LoadCustomerTask>()
-    .ExecuteAsync();
-```
-
-Use `AddParallel<TTask1, TTask2>()` or `AddParallel<TTask1, TTask2, TTask3>()` to add a parallel task group by type.
+Each `AddTask` creates a sequential execution group. `AddParallel` runs tasks in the same group concurrently before the next group starts.
 
 ```csharp
 await new TaskPipeline()
@@ -82,67 +62,150 @@ await new TaskPipeline()
     .ExecuteAsync();
 ```
 
-Generic task registration requires a public parameterless constructor when NOT using dependency injection.
-
-## Inline task registration
-
-Use the delegate-based `AddTask(...)` overloads when you need a small task without creating a dedicated `ITask` class.
-
-```csharp
-var result = await new TaskPipeline()
-    .AddTask("Set customer", context =>
-    {
-        context.Set("CustomerId", 123);
-        return Task.CompletedTask;
-    })
-    .AddTask("Send notification", async (context, cancellationToken) =>
-    {
-        var customerId = context.Get<int>("CustomerId");
-
-        await Task.Delay(500, cancellationToken);
-
-        Console.WriteLine($"Notification sent for customer {customerId}.");
-    })
-    .ExecuteAsync();
+```text
+ValidateCustomerTask
+        ↓
+GeneratePdfTask + SendEmailTask + SaveLogTask
+        ↓
+SaveOrderTask
 ```
 
-Inline tasks support the same retry and timeout settings as regular tasks.
+A task implements `ITask`:
+
+```csharp
+public sealed class ValidateCustomerTask : ITask
+{
+    public async Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
+    {
+        await Task.Delay(500, cancellationToken);
+        context.Set("CustomerId", 123);
+    }
+}
+```
+
+Generic registration requires a public parameterless constructor unless Dependency Injection is configured. Small operations can instead use the delegate-based `AddTask(...)` overloads shown in the quick start.
+
+## TaskContext
+
+One `TaskContext` is shared by the complete pipeline. Use `Set` to add or replace data, `Get<T>` for required values, and `TryGet<T>` for optional values.
+
+```csharp
+var context = new TaskContext();
+context.Set("CorrelationId", Guid.NewGuid().ToString("N"));
+context.Set("CustomerId", 123);
+
+var result = await new TaskPipeline()
+    .AddTask<LoadCustomerTask>()
+    .AddTask("Audit", ctx =>
+    {
+        if (ctx.TryGet<string>("CorrelationId", out var correlationId))
+            Console.WriteLine(correlationId);
+
+        return Task.CompletedTask;
+    })
+    .ExecuteAsync(context);
+
+var customerId = result.Context.Get<int>("CustomerId");
+```
+
+The final context is available from `TaskPipelineResult.Context`.
+
+## Branching
+
+Branches select a pipeline flow from the shared context.
 
 ```csharp
 await new TaskPipeline()
-    .AddTask(
-        "Call external API",
-        async (_, cancellationToken) =>
-        {
-            await Task.Delay(500, cancellationToken);
-        },
+    .AddBranch(
+        selector: ctx => ctx.Get<string>("CustomerType"),
+        configure: branch => branch
+            .When("premium", flow => flow.AddTask<ApplyPremiumDiscountTask>())
+            .When("standard", flow => flow.AddTask<ApplyStandardDiscountTask>())
+            .Default(flow => flow.AddTask<ReviewCustomerManuallyTask>()),
+        name: "Customer type decision")
+    .AddTask<SaveOrderTask>()
+    .ExecuteAsync(context);
+```
+
+The selector also has an asynchronous overload that receives a `CancellationToken`.
+
+## Reliability
+
+Configure retry, optional retry delay/backoff, timeout, and error handling globally:
+
+```csharp
+await new TaskPipeline()
+    .OnError(ErrorMode.StopOnFirstError)
+    .WithRetry(3)
+    .WithRetryDelay(TimeSpan.FromMilliseconds(250), exponentialBackoff: true)
+    .WithTimeout(TimeSpan.FromSeconds(30))
+    .AddTask<CallExternalApiTask>()
+    .ExecuteAsync();
+```
+
+Without `WithRetryDelay`, retries are immediate. Per-task settings override the pipeline defaults where supported:
+
+```csharp
+await new TaskPipeline()
+    .AddTask<CallExternalApiTask>(
         retryCount: 3,
         timeout: TimeSpan.FromSeconds(5))
     .ExecuteAsync();
 ```
 
-When no task name is provided, the default name is `InlineTask`.
+Error modes are `StopOnFirstError` and `ContinueOnError`.
+
+## Integrations
+
+### HTTP
+
+`AddTaskHttp<TRequest, TResponse>` sends a typed HTTP request and stores the typed response in `TaskContext`.
 
 ```csharp
-await new TaskPipeline()
-    .AddTask(context =>
-    {
-        context.Set("StartedAt", DateTimeOffset.UtcNow);
-        return Task.CompletedTask;
-    })
-    .ExecuteAsync();
+var result = await new TaskPipeline()
+    .AddTaskHttp<GetCustomerRequest, GetCustomerResponse>(
+        ctx => new GetCustomerRequest { CustomerId = ctx.Get<int>("CustomerId") },
+        options =>
+        {
+            options.RequestUri = "https://api.example.com/customers";
+            options.Method = HttpMethod.Post;
+            options.ResponseKey = "CustomerResponse";
+        })
+    .ExecuteAsync(context);
+
+var response = result.Context.Get<GetCustomerResponse>("CustomerResponse");
 ```
 
-### Dependency Injection
+Use `string` as `TResponse` for plain-text responses.
 
-If your tasks require constructor dependencies, register the service provider with `WithServiceProvider(...)` once and use the generic task methods normally. Do not pass the service provider to `AddTask`.
+### RabbitMQ RPC
+
+`AddTaskRpc<TRequest, TResponse>` publishes a typed request, waits for the correlated response, deserializes it, and stores it in `TaskContext`.
+
+```csharp
+var result = await new TaskPipeline()
+    .AddTaskRpc<GetCustomerRequest, GetCustomerResponse>(
+        ctx => new GetCustomerRequest { CustomerId = ctx.Get<int>("CustomerId") },
+        options =>
+        {
+            options.ConnectionUri = "amqp://guest:guest@localhost:5672/";
+            options.RoutingKey = "CustomerRequest";
+            options.ResponseKey = "CustomerResponse";
+        })
+    .ExecuteAsync(context);
+
+var response = result.Context.Get<GetCustomerResponse>("CustomerResponse");
+```
+
+## Dependency Injection
+
+Configure the service provider once. Typed tasks are then resolved from it, including tasks inside parallel groups and branches.
 
 ```csharp
 using Microsoft.Extensions.DependencyInjection;
 using NetTaskPipeline;
 
 var services = new ServiceCollection();
-
 services.AddSingleton<ICustomerRepository, CustomerRepository>();
 services.AddTransient<LoadCustomerTask>();
 services.AddTransient<SendCustomerNotificationTask>();
@@ -156,371 +219,65 @@ await new TaskPipeline()
     .ExecuteAsync();
 ```
 
-Tasks are resolved internally using:
-
-```csharp
-ActivatorUtilities.GetServiceOrCreateInstance(serviceProvider, taskType)
-```
-
-## Shared context
-
-Every pipeline execution uses a `TaskContext`. The same context instance is passed to each task, so values written by one task can be read by later tasks, branch selectors, RabbitMQ RPC tasks, and HTTP tasks.
-
-When `ExecuteAsync()` is called without arguments, the pipeline creates a new empty context. When the caller needs to provide initial data, create a `TaskContext` and pass it to `ExecuteAsync(context)`.
-
-```csharp
-var context = new TaskContext();
-context.Set("CorrelationId", Guid.NewGuid().ToString("N"));
-context.Set("RequestedBy", "system");
-
-var result = await new TaskPipeline()
-    .AddTask<LoadCustomerTask>()
-    .AddTask<SendCustomerEmailTask>()
-    .ExecuteAsync(context);
-```
-
-The final context is available through the pipeline result:
-
-```csharp
-var correlationId = result.Context.Get<string>("CorrelationId");
-```
-
-## Adding values to the shared context
-
-Use `context.Set(key, value)` inside any task to add or replace a value in the shared pipeline context.
-
-```csharp
-using NetTaskPipeline;
-
-public sealed class LoadCustomerTask : ITask
-{
-    public async Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
-    {
-        await Task.Delay(500, cancellationToken);
-
-        context.Set("CustomerId", 123);
-        context.Set("CustomerName", "John Smith");
-        context.Set("CustomerRequest", new GetCustomerRequest { CustomerId = 123 });
-        context.Set("CustomerType", "premium");
-    }
-}
-```
-
-A later task can read the values written by `LoadCustomerTask`:
-
-```csharp
-await new TaskPipeline()
-    .AddTask<LoadCustomerTask>()
-    .AddTask<SendCustomerEmailTask>()
-    .ExecuteAsync();
-```
-
-## Reading values from the shared context
-
-Use `context.Get<T>(key)` when a value is required. It returns the value using the expected type and throws if the key is missing or if the stored value is not compatible with `T`.
-
-```csharp
-using NetTaskPipeline;
-
-public sealed class SendCustomerEmailTask : ITask
-{
-    public async Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
-    {
-        var customerId = context.Get<int>("CustomerId");
-        var customerName = context.Get<string>("CustomerName");
-
-        await Task.Delay(1000, cancellationToken);
-
-        Console.WriteLine($"Email sent for customer {customerId} - {customerName}.");
-    }
-}
-```
-
-Use `context.TryGet<T>(key, out var value)` when the value is optional.
-
-```csharp
-public sealed class AuditTask : ITask
-{
-    public Task ExecuteAsync(TaskContext context, CancellationToken cancellationToken = default)
-    {
-        if (context.TryGet<string>("CorrelationId", out var correlationId))
-        {
-            Console.WriteLine($"Correlation ID: {correlationId}");
-        }
-
-        return Task.CompletedTask;
-    }
-}
-```
-
-## Context usage with branching
-
-`AddBranch` can choose the next flow from a value stored in `TaskContext`. Every `When` option receives an `Action<TaskPipeline>` so each branch can configure one or more tasks.
-
-```csharp
-var context = new TaskContext();
-context.Set("CustomerType", "premium");
-
-var result = await new TaskPipeline()
-    .AddBranch(
-        selector: ctx => ctx.Get<string>("CustomerType"),
-        configure: branch => branch
-            .When("premium", flow => flow
-                .AddTask<ApplyPremiumDiscountTask>()
-                .AddTask<SendPremiumEmailTask>())
-            .When("standard", flow => flow
-                .AddTask<ApplyStandardDiscountTask>()
-                .AddTask<SendStandardEmailTask>())
-            .When("blocked", flow => flow
-                .AddTask<BlockOrderTask>())
-            .Default(flow => flow
-                .AddTask<ReviewCustomerManuallyTask>()),
-        name: "Customer type decision")
-    .AddTask<SaveOrderTask>()
-    .ExecuteAsync(context);
-```
-
-The branch selector can also be asynchronous.
-
-```csharp
-await new TaskPipeline()
-    .AddBranch(
-        async (ctx, cancellationToken) =>
-        {
-            await Task.Delay(100, cancellationToken);
-
-            return ctx.Get<decimal>("Total") >= 1000m
-                ? "high-value"
-                : "low-value";
-        },
-        branch => branch
-            .When("high-value", flow => flow.AddTask<RequireManagerApprovalTask>())
-            .When("low-value", flow => flow.AddTask<AutoApproveTask>()),
-        name: "Approval decision")
-    .ExecuteAsync(context);
-```
-
-## Context usage with RabbitMQ RPC tasks
-
-Use `AddTaskRpc<TRequest, TResponse>(requestFactory, configure)` when the pipeline needs to send a typed RabbitMQ RPC request.
-
-```csharp
-using NetTaskPipeline;
-
-var context = new TaskContext();
-
-var result = await new TaskPipeline()
-    .AddTaskRpc<GetCustomerRequest, GetCustomerResponse>(
-        ctx => new GetCustomerRequest
-        {
-            CustomerId = ctx.Get<int>("CustomerId")
-        },
-        options =>
-        {
-            options.ConnectionUri = "amqp://guest:guest@localhost:5672/";
-            options.RoutingKey = "CustomerRequest";
-            options.ResponseKey = "CustomerResponse";
-        })
-    .ExecuteAsync(context);
-```
-
-The RabbitMQ RPC response is deserialized as `TResponse` and stored automatically using the configured `ResponseKey`.
-
-```csharp
-var response = result.Context.Get<GetCustomerResponse>("CustomerResponse");
-```
-
-## Context usage with HTTP tasks
-
-Use `AddTaskHttp<TRequest, TResponse>(requestFactory, configure)` when the pipeline needs to send a typed HTTP request and store the typed response in the shared context.
-
-```csharp
-using System.Net.Http;
-using NetTaskPipeline;
-
-var context = new TaskContext();
-context.Set("CustomerId", 123);
-
-var result = await new TaskPipeline()
-    .AddTaskHttp<GetCustomerRequest, GetCustomerResponse>(
-        ctx => new GetCustomerRequest
-        {
-            CustomerId = ctx.Get<int>("CustomerId")
-        },
-        options =>
-        {
-            options.RequestUri = "https://api.example.com/customers";
-            options.Method = HttpMethod.Post;
-            options.ResponseKey = "CustomerResponse";
-            options.Headers["x-api-key"] = "secret";
-        })
-    .ExecuteAsync(context);
-```
-
-The HTTP response is deserialized as `TResponse` and stored automatically using the configured `ResponseKey`.
-
-```csharp
-var response = result.Context.Get<GetCustomerResponse>("CustomerResponse");
-```
-
-When the endpoint returns plain text, use `string` as the response type.
-
-```csharp
-var result = await new TaskPipeline()
-    .AddTaskHttp<object, string>(
-        _ => new object(),
-        options =>
-        {
-            options.RequestUri = "https://api.example.com/health";
-            options.Method = HttpMethod.Get;
-            options.ResponseKey = "HealthStatus";
-        })
-    .ExecuteAsync();
-
-var healthStatus = result.Context.Get<string>("HealthStatus");
-```
-
-See `examples/HttpExample` for a runnable example that calls two public APIs.
-
-```csharp
-public sealed class GetCustomerRequest
-{
-    public int CustomerId { get; set; }
-}
-
-public sealed class GetCustomerResponse
-{
-    public int CustomerId { get; set; }
-
-    public string Name { get; set; } = string.Empty;
-}
-```
-
-## Execution model
-
-Each `AddTask` call creates one execution group.
-
-```csharp
-await new TaskPipeline()
-    .AddTask<FirstTask>()
-    .AddParallel<SecondTask, ThirdTask>()
-    .AddTask<FourthTask>()
-    .ExecuteAsync();
-```
-
-Execution order:
-
-```text
-FirstTask
-  ↓
-SecondTask + ThirdTask in parallel
-  ↓
-FourthTask
-```
-
-## Error handling
-
-```csharp
-await new TaskPipeline()
-    .OnError(ErrorMode.ContinueOnError)
-    .AddTask<FirstTask>()
-    .AddTask<SecondTask>()
-    .ExecuteAsync();
-```
-
-Available modes:
-
-- `StopOnFirstError`
-- `ContinueOnError`
-
-## Retry
-
-```csharp
-await new TaskPipeline()
-    .WithRetry(3)
-    .AddTask<CallExternalApiTask>()
-    .ExecuteAsync();
-```
-
-Configure an optional delay between retries. Exponential backoff keeps the first delay unchanged and doubles it for each subsequent retry:
-
-```csharp
-await new TaskPipeline()
-    .WithRetry(3)
-    .WithRetryDelay(TimeSpan.FromMilliseconds(250), exponentialBackoff: true)
-    .AddTask<CallExternalApiTask>()
-    .ExecuteAsync();
-```
-
-Without `WithRetryDelay`, retries remain immediate for backward compatibility.
-
-Per-task retry:
-
-```csharp
-await new TaskPipeline()
-    .AddTask<CallExternalApiTask>(retryCount: 3)
-    .ExecuteAsync();
-```
-
-## Timeout
-
-```csharp
-await new TaskPipeline()
-    .WithTimeout(TimeSpan.FromSeconds(30))
-    .AddTask<LongRunningTask>()
-    .ExecuteAsync();
-```
-
-Per-task timeout:
-
-```csharp
-await new TaskPipeline()
-    .AddTask<LongRunningTask>(timeout: TimeSpan.FromSeconds(5))
-    .ExecuteAsync();
-```
+Internally, task resolution uses `ActivatorUtilities.GetServiceOrCreateInstance`.
 
 ## Results
 
+`ExecuteAsync` returns a `TaskPipelineResult` containing the final context and task execution results.
+
 ```csharp
-TaskPipelineResult result = await pipeline.ExecuteAsync();
+var result = await pipeline.ExecuteAsync();
 
 foreach (var taskResult in result.TaskResults)
-{
     Console.WriteLine($"{taskResult.TaskName}: {taskResult.Status} in {taskResult.Duration}");
-}
 ```
 
-## Runnable examples
+## Examples
 
-The repository includes runnable examples. GitHub Actions runs and validates their expected results on pushes and pull requests to `main`, including the RabbitMQ RPC Docker example.
+| Example | Purpose |
+| --- | --- |
+| `SimpleExample` | Basic sequential pipeline |
+| `AdvancedExample` | Advanced pipeline behavior |
+| `BranchingExample` | Context-based branching |
+| `DependencyInjectionExample` | Service-provider task resolution |
+| `HttpExample` | Typed HTTP tasks |
+| `RpcDockerExample` | RabbitMQ RPC with Docker Compose |
+
+Run the .NET examples from the repository root:
 
 ```bash
 dotnet run --project examples/SimpleExample/SimpleExample.csproj
 dotnet run --project examples/AdvancedExample/AdvancedExample.csproj
 dotnet run --project examples/BranchingExample/BranchingExample.csproj
+dotnet run --project examples/DependencyInjectionExample/DependencyInjectionExample.csproj
 dotnet run --project examples/HttpExample/HttpExample.csproj
 ```
 
-The RabbitMQ RPC Docker example can be started with Docker Compose:
+Run the RabbitMQ RPC example with Docker:
 
 ```bash
 cd examples/RpcDockerExample
 docker compose up --build
 ```
 
+GitHub Actions executes all examples on pushes and pull requests to `main` and validates their expected results.
+
 ## Development
 
-Pull requests must keep line coverage at or above 80% for unit-testable code. RabbitMQ transport/RPC files are excluded from the unit coverage gate and are exercised separately by RabbitMQ-backed integration tests in CI. The integration job starts a real RabbitMQ service, validates a typed RPC round trip and timeout behavior, collects Cobertura coverage, and uploads the coverage report as a workflow artifact. Code changes should update affected tests, examples, and this README when behavior or public APIs change. Project documentation is intentionally kept in this main README. CI cancels superseded runs for the same branch. NuGet packages are published only from GitHub Releases whose tags use a package version such as `v1.2.3`; the release workflow derives the NuGet version from that tag and publishes only after build, tests, coverage, and all examples succeed. Packages include repository/source metadata, Source Link support, and `.snupkg` symbols for source-level debugging.
+| Check | Behavior |
+| --- | --- |
+| Build and unit tests | Runs for pushes and pull requests to `main` |
+| Unit coverage | Requires at least 80% line coverage for unit-testable code |
+| RabbitMQ integration | Runs against a real RabbitMQ service and tests RPC round-trip and timeout behavior |
+| Integration coverage | Collected separately as Cobertura and uploaded as a workflow artifact |
+| Examples | All runnable examples must produce their expected results |
+| Concurrency | Superseded CI runs for the same branch are cancelled |
+| NuGet release | Published only from a GitHub Release tag such as `v1.2.3` after validation succeeds |
+| Package debugging | Source Link and `.snupkg` symbols are published with the package |
 
-### Dependency Injection example
+RabbitMQ transport/RPC files are excluded from the **unit** coverage gate because they are integration-bound; they are covered separately by the RabbitMQ integration job. The ≥80% badge therefore represents the unit-testable-code gate, not aggregate coverage across every source file.
 
-Run the dependency injection example from the repository root:
-
-```bash
-dotnet run --project examples/DependencyInjectionExample/DependencyInjectionExample.csproj
-```
-
-Register task dependencies with `Microsoft.Extensions.DependencyInjection`, build the service provider, and configure the pipeline once with `WithServiceProvider(serviceProvider)`. Typed tasks are then resolved through `ActivatorUtilities.GetServiceOrCreateInstance`, including tasks inside parallel groups and branches.
+Code changes should keep tests and examples current. Project documentation is intentionally maintained only in this root `README.md`.
 
 ## License
 

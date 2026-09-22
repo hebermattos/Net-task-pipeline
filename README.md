@@ -1,6 +1,7 @@
 # NetTaskPipeline: Async Task Pipeline for .NET
 
 [![NuGet](https://img.shields.io/nuget/v/NetTaskPipeline.svg)](https://www.nuget.org/packages/NetTaskPipeline)
+[![examples](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/examples.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/examples.yml)
 [![build and tests](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml)
 ![coverage](https://img.shields.io/badge/coverage-%E2%89%A580%25-green)
 
@@ -491,7 +492,7 @@ foreach (var taskResult in result.TaskResults)
 
 ## Runnable examples
 
-The repository includes runnable examples.
+The repository includes runnable examples. GitHub Actions runs all examples on pushes and pull requests to `main`, including the RabbitMQ RPC Docker example.
 
 ```bash
 dotnet run --project examples/SimpleExample/SimpleExample.csproj

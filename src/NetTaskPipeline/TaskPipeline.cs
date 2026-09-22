@@ -350,6 +350,10 @@ public sealed class TaskPipeline
             {
                 selectedValue = await Selector(context, cancellationToken).ConfigureAwait(false);
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 return new[] { CreateBranchFailureResult(Name, groupIndex, ex) };

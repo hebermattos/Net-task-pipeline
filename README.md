@@ -44,6 +44,7 @@ Console.WriteLine($"Pipeline success: {result.Success}");
 | Shared state | `TaskContext` |
 | Retry | `WithRetry(...)` / per-task `retryCount` |
 | Retry delay/backoff | `WithRetryDelay(...)` |
+| Retry filtering | `WithRetryPolicy(...)` |
 | Timeout | `WithTimeout(...)` / per-task `timeout` |
 | Error handling | `OnError(...)` |
 | Dependency Injection | `WithServiceProvider(...)` |
@@ -108,7 +109,7 @@ var result = await new TaskPipeline()
 var customerId = result.Context.Get<int>("CustomerId");
 ```
 
-The final context is available from `TaskPipelineResult.Context`.
+The final context is available from `TaskPipelineResult.Context`. `GetOrAdd` uses `ConcurrentDictionary` semantics: insertion is atomic, but its value factory may execute more than once under contention, so factories should not contain side effects.
 
 ## Branching
 
@@ -143,7 +144,7 @@ await new TaskPipeline()
     .ExecuteAsync();
 ```
 
-Without `WithRetryDelay`, retries are immediate. Per-task settings override the pipeline defaults where supported:
+Without `WithRetryDelay`, retries are immediate. Exponential backoff is overflow-safe, and optional jitter can spread concurrent retries (`WithRetryDelay(delay, exponentialBackoff: true, jitter: true)`). Use `WithRetryPolicy(exception => ...)` to retry only selected failures. External cancellation is never retried; task timeouts remain failures and can be filtered by the retry policy. Per-task settings override the pipeline defaults where supported:
 
 ```csharp
 await new TaskPipeline()

@@ -362,6 +362,75 @@ public sealed class TaskPipelineTests
         Assert.True(stopwatch.Elapsed >= TimeSpan.FromMilliseconds(40));
     }
 
+
+    [Fact]
+    public async Task ExecuteAsync_WithRetryPolicy_DoesNotRetryRejectedException()
+    {
+        var attempts = 0;
+
+        var result = await new TaskPipeline()
+            .WithRetry(3)
+            .WithRetryPolicy(exception => exception is not ArgumentException)
+            .AddTask(new DelegateTask("Invalid", _ =>
+            {
+                attempts++;
+                throw new ArgumentException("Invalid input.");
+            }))
+            .ExecuteAsync();
+
+        var taskResult = Assert.Single(result.TaskResults);
+        Assert.False(result.Success);
+        Assert.Equal(1, attempts);
+        Assert.Equal(1, taskResult.Attempts);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithRetryPolicy_RetriesAcceptedException()
+    {
+        var attempts = 0;
+
+        var result = await new TaskPipeline()
+            .WithRetry(2)
+            .WithRetryPolicy(exception => exception is InvalidOperationException)
+            .AddTask(new DelegateTask("Transient", _ =>
+            {
+                attempts++;
+                if (attempts == 1)
+                    throw new InvalidOperationException("Temporary.");
+
+                return Task.CompletedTask;
+            }))
+            .ExecuteAsync();
+
+        Assert.True(result.Success);
+        Assert.Equal(2, attempts);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithExternalCancellation_DoesNotRetry()
+    {
+        var attempts = 0;
+        using var cancellationTokenSource = new CancellationTokenSource();
+
+        var pipeline = new TaskPipeline()
+            .WithRetry(3)
+            .AddTask(new DelegateTask("Cancelable", async (_, cancellationToken) =>
+            {
+                attempts++;
+                cancellationTokenSource.Cancel();
+                await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+            }));
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => pipeline.ExecuteAsync(cancellationTokenSource.Token));
+        Assert.Equal(1, attempts);
+    }
+
+    [Fact]
+    public void WithRetryPolicy_WithNullPredicate_ThrowsArgumentNullException()
+    {
+        Assert.Throws<ArgumentNullException>(() => new TaskPipeline().WithRetryPolicy(null!));
+    }
+
     [Fact]
     public void WithTimeout_WithZeroTimeout_ThrowsArgumentOutOfRangeException()
     {

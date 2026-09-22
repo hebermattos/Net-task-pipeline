@@ -56,7 +56,7 @@ public sealed class TaskContext
     }
 
     /// <summary>
-    /// Gets an existing value or atomically adds a new value.
+    /// Gets an existing value or atomically adds a new value. The factory may run more than once under contention; avoid side effects.
     /// </summary>
     public T GetOrAdd<T>(string key, Func<string, T> valueFactory)
     {
@@ -87,6 +87,7 @@ public sealed class TaskContext
         value = default;
         return false;
     }
+
     private static void ValidateKey(string key)
     {
         if (string.IsNullOrWhiteSpace(key))

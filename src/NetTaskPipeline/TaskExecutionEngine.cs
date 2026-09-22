@@ -5,22 +5,28 @@ using System.Threading.Tasks;
 
 namespace NetTaskPipeline;
 
+internal sealed class TaskExecutionOptions
+{
+    public int RetryCount { get; init; }
+    public TimeSpan? Timeout { get; init; }
+    public Func<int, TimeSpan>? RetryDelay { get; init; }
+    public Func<Exception, bool>? ShouldRetry { get; init; }
+}
+
 internal static class TaskExecutionEngine
 {
     internal static async Task<TaskExecutionResult> ExecuteAsync(
         ITask task,
         string taskName,
         int groupIndex,
-        int retryCount,
-        TimeSpan? timeout,
-        Func<int, TimeSpan>? retryDelay,
+        TaskExecutionOptions options,
         TaskContext context,
         CancellationToken rootCancellationToken,
         CancellationToken executionCancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
         var startedAt = DateTimeOffset.UtcNow;
-        var maxAttempts = retryCount + 1;
+        var maxAttempts = options.RetryCount + 1;
         Exception? lastException = null;
         var status = TaskExecutionStatus.Failed;
         var attempts = 0;
@@ -30,14 +36,14 @@ internal static class TaskExecutionEngine
             attempts = attempt;
             rootCancellationToken.ThrowIfCancellationRequested();
 
-            if (attempt > 1 && retryDelay != null)
+            if (attempt > 1 && options.RetryDelay != null)
             {
-                var delay = retryDelay(attempt - 1);
+                var delay = options.RetryDelay(attempt - 1);
                 if (delay > TimeSpan.Zero)
                     await Task.Delay(delay, rootCancellationToken).ConfigureAwait(false);
             }
 
-            using var timeoutCancellationTokenSource = CreateTimeoutCancellationTokenSource(executionCancellationToken, timeout);
+            using var timeoutCancellationTokenSource = CreateTimeoutCancellationTokenSource(executionCancellationToken, options.Timeout);
             try
             {
                 await task.ExecuteAsync(context, timeoutCancellationTokenSource.Token).ConfigureAwait(false);
@@ -45,11 +51,22 @@ internal static class TaskExecutionEngine
                 lastException = null;
                 break;
             }
-            catch (OperationCanceledException ex) when (!rootCancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException) when (rootCancellationToken.IsCancellationRequested)
             {
-                if (timeoutCancellationTokenSource.IsCancellationRequested && !executionCancellationToken.IsCancellationRequested)
+                throw;
+            }
+            catch (OperationCanceledException ex)
+            {
+                if (executionCancellationToken.IsCancellationRequested)
                 {
-                    lastException = new TimeoutException($"The task '{taskName}' exceeded the configured timeout of {timeout}.", ex);
+                    lastException = ex;
+                    status = TaskExecutionStatus.Canceled;
+                    break;
+                }
+
+                if (timeoutCancellationTokenSource.IsCancellationRequested)
+                {
+                    lastException = new TimeoutException($"The task '{taskName}' exceeded the configured timeout of {options.Timeout}.", ex);
                     status = TaskExecutionStatus.Failed;
                 }
                 else
@@ -64,6 +81,9 @@ internal static class TaskExecutionEngine
                 lastException = ex;
                 status = TaskExecutionStatus.Failed;
             }
+
+            if (attempt < maxAttempts && lastException != null && options.ShouldRetry != null && !options.ShouldRetry(lastException))
+                break;
         }
 
         stopwatch.Stop();
@@ -80,9 +100,7 @@ internal static class TaskExecutionEngine
         };
     }
 
-    private static CancellationTokenSource CreateTimeoutCancellationTokenSource(
-        CancellationToken cancellationToken,
-        TimeSpan? timeout)
+    private static CancellationTokenSource CreateTimeoutCancellationTokenSource(CancellationToken cancellationToken, TimeSpan? timeout)
     {
         var cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         if (timeout.HasValue)

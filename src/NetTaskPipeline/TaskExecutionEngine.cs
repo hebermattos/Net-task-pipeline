@@ -47,9 +47,20 @@ internal static class TaskExecutionEngine
             try
             {
                 await task.ExecuteAsync(context, timeoutCancellationTokenSource.Token).ConfigureAwait(false);
-                status = TaskExecutionStatus.Success;
-                lastException = null;
-                break;
+
+                if (options.Timeout.HasValue &&
+                    timeoutCancellationTokenSource.IsCancellationRequested &&
+                    !executionCancellationToken.IsCancellationRequested)
+                {
+                    lastException = CreateTimeoutException(taskName, options.Timeout.Value);
+                    status = TaskExecutionStatus.Failed;
+                }
+                else
+                {
+                    status = TaskExecutionStatus.Success;
+                    lastException = null;
+                    break;
+                }
             }
             catch (OperationCanceledException) when (rootCancellationToken.IsCancellationRequested)
             {
@@ -66,7 +77,7 @@ internal static class TaskExecutionEngine
 
                 if (timeoutCancellationTokenSource.IsCancellationRequested)
                 {
-                    lastException = new TimeoutException($"The task '{taskName}' exceeded the configured timeout of {options.Timeout}.", ex);
+                    lastException = CreateTimeoutException(taskName, options.Timeout!.Value, ex);
                     status = TaskExecutionStatus.Failed;
                 }
                 else
@@ -98,6 +109,11 @@ internal static class TaskExecutionEngine
             StartedAt = startedAt,
             FinishedAt = DateTimeOffset.UtcNow
         };
+    }
+
+    private static TimeoutException CreateTimeoutException(string taskName, TimeSpan timeout, Exception? innerException = null)
+    {
+        return new TimeoutException($"The task '{taskName}' exceeded the configured timeout of {timeout}.", innerException);
     }
 
     private static CancellationTokenSource CreateTimeoutCancellationTokenSource(CancellationToken cancellationToken, TimeSpan? timeout)

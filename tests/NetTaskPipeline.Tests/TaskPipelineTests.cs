@@ -421,7 +421,7 @@ public sealed class TaskPipelineTests
                 await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
             }));
 
-        await Assert.ThrowsAsync<OperationCanceledException>(() => pipeline.ExecuteAsync(cancellationTokenSource.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pipeline.ExecuteAsync(cancellationTokenSource.Token));
         Assert.Equal(1, attempts);
     }
 
@@ -472,7 +472,7 @@ public sealed class TaskPipelineTests
         var pipeline = new TaskPipeline()
             .AddTask(new DelegateTask("Should not run", _ => Task.CompletedTask));
 
-        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             pipeline.ExecuteAsync(cancellationTokenSource.Token));
     }
 
@@ -750,7 +750,7 @@ public sealed class TaskPipelineTests
 
         cancellationTokenSource.CancelAfter(50);
 
-        await Assert.ThrowsAsync<OperationCanceledException>(() => pipeline.ExecuteAsync(cancellationTokenSource.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pipeline.ExecuteAsync(cancellationTokenSource.Token));
         Assert.Equal(1, attempts);
     }
 

@@ -8,42 +8,42 @@ namespace NetTaskPipeline;
 public sealed class TaskExecutionResult
 {
     /// <summary>
-    /// Gets or sets the task display name.
+    /// Gets the task display name.
     /// </summary>
     public string TaskName { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets the index of the group that executed the task.
+    /// Gets the index of the group that executed the task.
     /// </summary>
     public int GroupIndex { get; set; }
 
     /// <summary>
-    /// Gets or sets the number of attempts used to execute the task.
+    /// Gets the number of attempts used to execute the task.
     /// </summary>
     public int Attempts { get; set; }
 
     /// <summary>
-    /// Gets or sets the final execution status.
+    /// Gets the final execution status.
     /// </summary>
     public TaskExecutionStatus Status { get; set; }
 
     /// <summary>
-    /// Gets or sets the exception thrown by the task, if any.
+    /// Gets the exception thrown by the task, if any.
     /// </summary>
     public Exception? Exception { get; set; }
 
     /// <summary>
-    /// Gets or sets the task execution duration.
+    /// Gets the task execution duration.
     /// </summary>
     public TimeSpan Duration { get; set; }
 
     /// <summary>
-    /// Gets or sets the UTC start timestamp.
+    /// Gets the UTC start timestamp.
     /// </summary>
     public DateTimeOffset StartedAt { get; set; }
 
     /// <summary>
-    /// Gets or sets the UTC finish timestamp.
+    /// Gets the UTC finish timestamp.
     /// </summary>
     public DateTimeOffset FinishedAt { get; set; }
 

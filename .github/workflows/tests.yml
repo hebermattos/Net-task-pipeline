@@ -31,7 +31,7 @@ jobs:
       - name: Pack
         run: dotnet pack src/NetTaskPipeline/NetTaskPipeline.csproj --configuration Release --no-build --output artifacts/packages
       - name: Test with coverage
-        run: dotnet test tests/NetTaskPipeline.Tests/NetTaskPipeline.Tests.csproj --configuration Release --no-build --collect:"XPlat Code Coverage" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.ExcludeByFile="**/RabbitMq*.cs,**/TaskRpc*.cs"
+        run: dotnet test tests/NetTaskPipeline.Tests/NetTaskPipeline.Tests.csproj --configuration Release --no-build --filter "Category!=Integration" --collect:"XPlat Code Coverage" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.ExcludeByFile="**/RabbitMq*.cs,**/TaskRpc*.cs"
       - name: Enforce 80% line coverage
         shell: pwsh
         run: |
@@ -41,3 +41,43 @@ jobs:
           $percent = [math]::Round(([double]$coverage.coverage.'line-rate') * 100, 2)
           Write-Host "Line coverage: $percent%"
           if ($percent -lt 80) { throw "Line coverage $percent% is below the required 80%." }
+
+  rabbitmq-integration-tests:
+    runs-on: ubuntu-latest
+    services:
+      rabbitmq:
+        image: rabbitmq:3-management
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Restore
+        run: dotnet restore TaskPipeline.sln
+      - name: Build
+        run: dotnet build TaskPipeline.sln --configuration Release --no-restore
+      - name: Run RabbitMQ integration tests with coverage
+        run: dotnet test tests/NetTaskPipeline.Tests/NetTaskPipeline.Tests.csproj --configuration Release --no-build --filter "Category=Integration" --collect:"XPlat Code Coverage" --results-directory TestResults/RabbitMqIntegration
+      - name: Show integration coverage
+        shell: pwsh
+        run: |
+          $coverageFile = Get-ChildItem -Path "TestResults/RabbitMqIntegration" -Filter "coverage.cobertura.xml" -Recurse | Select-Object -First 1
+          if (-not $coverageFile) { throw "RabbitMQ integration coverage file was not found." }
+          [xml]$coverage = Get-Content $coverageFile.FullName
+          $percent = [math]::Round(([double]$coverage.coverage.'line-rate') * 100, 2)
+          Write-Host "RabbitMQ integration run line coverage: $percent%"
+      - name: Upload integration coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: rabbitmq-integration-coverage
+          path: TestResults/RabbitMqIntegration/**/coverage.cobertura.xml
+          if-no-files-found: error

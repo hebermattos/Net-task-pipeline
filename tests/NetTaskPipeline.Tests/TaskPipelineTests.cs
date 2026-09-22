@@ -517,7 +517,7 @@ public sealed class TaskPipelineTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_WithValueBranchWithoutMatchingFlow_ReturnsNoTaskResults()
+    public async Task ExecuteAsync_WithValueBranchWithoutMatchingFlow_ReturnsFailedResult()
     {
         var context = new TaskContext();
         context.Set("Flow", "none");
@@ -533,8 +533,10 @@ public sealed class TaskPipelineTests
                 name: "Optional decision")
             .ExecuteAsync(context);
 
-        Assert.True(result.Success);
-        Assert.Empty(result.TaskResults);
+        var taskResult = Assert.Single(result.TaskResults);
+        Assert.False(result.Success);
+        Assert.Equal(TaskExecutionStatus.Failed, taskResult.Status);
+        Assert.IsType<InvalidOperationException>(taskResult.Exception);
         Assert.False(result.Context.TryGet<bool>("Executed", out _));
     }
 
@@ -696,6 +698,102 @@ public sealed class TaskPipelineTests
         var context = new TaskContext();
 
         Assert.Throws<ArgumentNullException>(() => context.GetOrAdd<int>("Value", null!));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithTimeout_WhenTaskIgnoresCancellation_ReturnsTimeoutAfterTaskCompletes()
+    {
+        var result = await new TaskPipeline()
+            .WithTimeout(TimeSpan.FromMilliseconds(20))
+            .AddTask(new DelegateTask("Ignores cancellation", async _ => await Task.Delay(80)))
+            .ExecuteAsync();
+
+        var taskResult = Assert.Single(result.TaskResults);
+        Assert.False(result.Success);
+        Assert.IsType<TimeoutException>(taskResult.Exception);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithTimeoutRetryPolicy_CanRejectTimeoutRetry()
+    {
+        var attempts = 0;
+
+        var result = await new TaskPipeline()
+            .WithRetry(2)
+            .WithTimeout(TimeSpan.FromMilliseconds(20))
+            .WithRetryPolicy(exception => exception is not TimeoutException)
+            .AddTask(new DelegateTask("Timeout", async (_, cancellationToken) =>
+            {
+                attempts++;
+                await Task.Delay(200, cancellationToken);
+            }))
+            .ExecuteAsync();
+
+        Assert.False(result.Success);
+        Assert.Equal(1, attempts);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenCanceledDuringRetryDelay_DoesNotStartAnotherAttempt()
+    {
+        var attempts = 0;
+        using var cancellationTokenSource = new CancellationTokenSource();
+
+        var pipeline = new TaskPipeline()
+            .WithRetry(2)
+            .WithRetryDelay(TimeSpan.FromSeconds(5))
+            .AddTask(new DelegateTask("Retry delay", _ =>
+            {
+                attempts++;
+                throw new InvalidOperationException("Retry.");
+            }));
+
+        cancellationTokenSource.CancelAfter(50);
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => pipeline.ExecuteAsync(cancellationTokenSource.Token));
+        Assert.Equal(1, attempts);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithLargeParallelGroup_RespectsConcurrencyLimitAndPreservesResults()
+    {
+        var running = 0;
+        var maxRunning = 0;
+        var tasks = Enumerable.Range(0, 200)
+            .Select(index => (ITask)new DelegateTask($"Task {index}", async (_, cancellationToken) =>
+            {
+                var current = Interlocked.Increment(ref running);
+                UpdateMax(ref maxRunning, current);
+                try
+                {
+                    await Task.Delay(2, cancellationToken);
+                }
+                finally
+                {
+                    Interlocked.Decrement(ref running);
+                }
+            }))
+            .ToArray();
+
+        var result = await new TaskPipeline()
+            .WithMaxDegreeOfParallelism(8)
+            .AddTask(tasks)
+            .ExecuteAsync();
+
+        Assert.True(result.Success);
+        Assert.Equal(200, result.TaskResults.Count);
+        Assert.InRange(maxRunning, 1, 8);
+    }
+
+    [Fact]
+    public async Task TaskContext_GetOrAdd_UnderContention_ReturnsSingleStoredValue()
+    {
+        var context = new TaskContext();
+        var values = await Task.WhenAll(Enumerable.Range(0, 100)
+            .Select(_ => Task.Run(() => context.GetOrAdd("Shared", _ => Guid.NewGuid()))));
+
+        Assert.All(values, value => Assert.Equal(values[0], value));
+        Assert.Equal(values[0], context.Get<Guid>("Shared"));
     }
 
     private static void UpdateMax(ref int target, int value)

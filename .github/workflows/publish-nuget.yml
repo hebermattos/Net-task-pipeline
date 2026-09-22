@@ -8,14 +8,11 @@ permissions:
   contents: read
 
 jobs:
-  build-and-tests:
+  validate:
     uses: ./.github/workflows/tests.yml
 
-  examples:
-    uses: ./.github/workflows/examples.yml
-
   publish:
-    needs: [build-and-tests, examples]
+    needs: validate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -38,6 +35,27 @@ jobs:
         run: dotnet restore src/NetTaskPipeline/NetTaskPipeline.csproj
       - name: Pack release
         run: dotnet pack src/NetTaskPipeline/NetTaskPipeline.csproj --configuration Release --no-restore --output artifacts/packages -p:PackageVersion=$PACKAGE_VERSION
+      - name: Smoke test packed NuGet package
+        shell: bash
+        run: |
+          package_path=$(find artifacts/packages -maxdepth 1 -name "NetTaskPipeline.$PACKAGE_VERSION.nupkg" -print -quit)
+          test -n "$package_path"
+          mkdir -p artifacts/smoke
+          dotnet new console --framework net8.0 --output artifacts/smoke/app
+          dotnet nuget add source "$(pwd)/artifacts/packages" --name local-package
+          dotnet add artifacts/smoke/app/app.csproj package NetTaskPipeline --version "$PACKAGE_VERSION" --source "$(pwd)/artifacts/packages"
+          cat > artifacts/smoke/app/Program.cs <<'EOF'
+          using NetTaskPipeline;
+
+          var result = await new TaskPipeline()
+              .AddTask("Smoke test", _ => Task.CompletedTask)
+              .ExecuteAsync();
+
+          if (!result.Success)
+              throw new InvalidOperationException("Package smoke test failed.");
+          EOF
+          dotnet run --project artifacts/smoke/app/app.csproj --configuration Release
+
       - name: Publish to NuGet
         run: dotnet nuget push "artifacts/packages/*.nupkg" --api-key "${{ secrets.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json
       - name: Publish symbols to NuGet

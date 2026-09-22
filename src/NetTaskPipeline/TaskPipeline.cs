@@ -15,6 +15,7 @@ public sealed class TaskPipeline
     private ErrorMode _errorMode = ErrorMode.StopOnFirstError;
     private int _defaultRetryCount;
     private Func<int, TimeSpan>? _retryDelay;
+    private Func<Exception, bool>? _shouldRetry;
     private TimeSpan? _defaultTimeout;
     private int? _maxDegreeOfParallelism;
 
@@ -37,14 +38,26 @@ public sealed class TaskPipeline
         return this;
     }
 
-    public TaskPipeline WithRetryDelay(TimeSpan delay, bool exponentialBackoff = false)
+    public TaskPipeline WithRetryDelay(TimeSpan delay, bool exponentialBackoff = false, bool jitter = false)
     {
         if (delay < TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(delay), "Retry delay cannot be negative.");
 
-        _retryDelay = exponentialBackoff
-            ? attempt => TimeSpan.FromTicks(delay.Ticks * (1L << Math.Min(attempt - 1, 20)))
-            : _ => delay;
+        _retryDelay = attempt =>
+        {
+            var multiplier = exponentialBackoff ? Math.Pow(2, Math.Min(attempt - 1, 20)) : 1d;
+            var ticks = Math.Min(delay.Ticks * multiplier, TimeSpan.MaxValue.Ticks);
+            if (jitter && ticks > 0)
+                ticks *= 0.5d + Random.Shared.NextDouble() * 0.5d;
+
+            return TimeSpan.FromTicks((long)ticks);
+        };
+        return this;
+    }
+
+    public TaskPipeline WithRetryPolicy(Func<Exception, bool> shouldRetry)
+    {
+        _shouldRetry = shouldRetry ?? throw new ArgumentNullException(nameof(shouldRetry));
         return this;
     }
 
@@ -191,6 +204,7 @@ public sealed class TaskPipeline
             _errorMode = _errorMode,
             _defaultRetryCount = _defaultRetryCount,
             _retryDelay = _retryDelay,
+            _shouldRetry = _shouldRetry,
             _defaultTimeout = _defaultTimeout,
             _maxDegreeOfParallelism = _maxDegreeOfParallelism,
             _taskFactory = _taskFactory
@@ -209,7 +223,15 @@ public sealed class TaskPipeline
         if (group.IsParallel)
             return await ExecuteParallelGroupAsync(group, context, groupIndex, cancellationToken).ConfigureAwait(false);
 
-        var result = await TaskExecutionEngine.ExecuteAsync(group.Tasks[0].Task, group.Tasks[0].Name, groupIndex, group.Tasks[0].RetryCount ?? _defaultRetryCount, group.Tasks[0].Timeout ?? _defaultTimeout, _retryDelay, context, cancellationToken, cancellationToken).ConfigureAwait(false);
+        var pipelineTask = group.Tasks[0];
+        var result = await TaskExecutionEngine.ExecuteAsync(
+            pipelineTask.Task,
+            pipelineTask.Name,
+            groupIndex,
+            CreateExecutionOptions(pipelineTask),
+            context,
+            cancellationToken,
+            cancellationToken).ConfigureAwait(false);
         return new[] { result };
     }
 
@@ -227,7 +249,14 @@ public sealed class TaskPipeline
                 if (groupCancellationTokenSource.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
                     return TaskExecutionResult.Skipped(pipelineTask.Name, groupIndex);
 
-                var result = await TaskExecutionEngine.ExecuteAsync(pipelineTask.Task, pipelineTask.Name, groupIndex, pipelineTask.RetryCount ?? _defaultRetryCount, pipelineTask.Timeout ?? _defaultTimeout, _retryDelay, context, cancellationToken, groupCancellationTokenSource.Token).ConfigureAwait(false);
+                var result = await TaskExecutionEngine.ExecuteAsync(
+                    pipelineTask.Task,
+                    pipelineTask.Name,
+                    groupIndex,
+                    CreateExecutionOptions(pipelineTask),
+                    context,
+                    cancellationToken,
+                    groupCancellationTokenSource.Token).ConfigureAwait(false);
 
                 if (_errorMode == ErrorMode.StopOnFirstError && !result.Success)
                     groupCancellationTokenSource.Cancel();
@@ -242,6 +271,14 @@ public sealed class TaskPipeline
 
         return await Task.WhenAll(executions).ConfigureAwait(false);
     }
+
+    private TaskExecutionOptions CreateExecutionOptions(PipelineTask task) => new TaskExecutionOptions
+    {
+        RetryCount = task.RetryCount ?? _defaultRetryCount,
+        Timeout = task.Timeout ?? _defaultTimeout,
+        RetryDelay = _retryDelay,
+        ShouldRetry = _shouldRetry
+    };
 
     private static TaskExecutionResult CreateBranchFailureResult(string branchName, int groupIndex, Exception exception)
     {

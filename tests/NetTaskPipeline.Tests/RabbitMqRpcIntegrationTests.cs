@@ -3,6 +3,7 @@ using System.Text.Json;
 using NetTaskPipeline;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using Xunit;
 
 namespace NetTaskPipeline.Tests;
 

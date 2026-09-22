@@ -7,10 +7,10 @@ namespace NetTaskPipeline;
 
 internal sealed class TaskExecutionOptions
 {
-    public int RetryCount { get; init; }
-    public TimeSpan? Timeout { get; init; }
-    public Func<int, TimeSpan>? RetryDelay { get; init; }
-    public Func<Exception, bool>? ShouldRetry { get; init; }
+    public int RetryCount { get; set; }
+    public TimeSpan? Timeout { get; set; }
+    public Func<int, TimeSpan>? RetryDelay { get; set; }
+    public Func<Exception, bool>? ShouldRetry { get; set; }
 }
 
 internal static class TaskExecutionEngine

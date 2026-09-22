@@ -10,6 +10,8 @@ namespace NetTaskPipeline;
 /// <summary>Executes tasks in sequential groups, allowing each group to run one or more tasks in parallel.</summary>
 public sealed class TaskPipeline
 {
+    private static readonly Random JitterRandom = new Random();
+    private static readonly object JitterLock = new object();
     private readonly List<PipelineStep> _steps = new List<PipelineStep>();
     private Func<Type, ITask>? _taskFactory;
     private ErrorMode _errorMode = ErrorMode.StopOnFirstError;
@@ -48,7 +50,13 @@ public sealed class TaskPipeline
             var multiplier = exponentialBackoff ? Math.Pow(2, Math.Min(attempt - 1, 20)) : 1d;
             var ticks = Math.Min(delay.Ticks * multiplier, TimeSpan.MaxValue.Ticks);
             if (jitter && ticks > 0)
-                ticks *= 0.5d + Random.Shared.NextDouble() * 0.5d;
+            {
+                double jitterFactor;
+                lock (JitterLock)
+                    jitterFactor = 0.5d + JitterRandom.NextDouble() * 0.5d;
+
+                ticks *= jitterFactor;
+            }
 
             return TimeSpan.FromTicks((long)ticks);
         };

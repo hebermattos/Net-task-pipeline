@@ -273,7 +273,7 @@ GitHub Actions executes all examples on pushes and pull requests to `main` and v
 | Integration coverage | Collected separately as Cobertura and uploaded as a workflow artifact |
 | Examples | All runnable examples must produce their expected results |
 | Concurrency | Superseded CI runs for the same branch are cancelled |
-| NuGet release | Published only from a GitHub Release tag such as `v1.2.3` after validation succeeds |
+| NuGet release | Published only from a GitHub Release tag such as `v1.0.0` after the full CI and a packed-package smoke test succeed |
 | Package debugging | Source Link and `.snupkg` symbols are published with the package |
 
 RabbitMQ transport/RPC files are excluded from the **unit** coverage gate because they are integration-bound; they are covered separately by the RabbitMQ integration job. The ≥80% badge therefore represents the unit-testable-code gate, not aggregate coverage across every source file.

@@ -1,0 +1,48 @@
+name: examples
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dotnet-examples:
+    name: Run .NET examples
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [SimpleExample, AdvancedExample, BranchingExample, DependencyInjectionExample, HttpExample]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Run example
+        timeout-minutes: 5
+        run: dotnet run --project examples/${{ matrix.example }}/${{ matrix.example }}.csproj --configuration Release
+
+  rabbitmq-rpc-example:
+    name: Run RabbitMQ RPC example
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Start example
+        working-directory: examples/RpcDockerExample
+        run: docker compose up --build --abort-on-container-exit --exit-code-from main-app
+      - name: Show container logs
+        if: always()
+        working-directory: examples/RpcDockerExample
+        run: docker compose logs --no-color
+      - name: Stop example
+        if: always()
+        working-directory: examples/RpcDockerExample
+        run: docker compose down --volumes --remove-orphans

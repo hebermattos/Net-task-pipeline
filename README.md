@@ -510,7 +510,7 @@ docker compose up --build
 
 ## Development
 
-Pull requests must keep line coverage at or above 80% for unit-testable code. RabbitMQ transport/RPC files are integration-bound and excluded from the unit coverage gate; their integration validation remains separate. Code changes should update affected tests, examples, and this README when behavior or public APIs change. Project documentation is intentionally kept in this main README. CI cancels superseded runs for the same branch. NuGet packages are published only from GitHub Releases whose tags use a package version such as `v1.2.3`; the release workflow derives the NuGet version from that tag and publishes only after build, tests, coverage, and all examples succeed.
+Pull requests must keep line coverage at or above 80% for unit-testable code. RabbitMQ transport/RPC files are integration-bound and excluded from the unit coverage gate; their integration validation remains separate. Code changes should update affected tests, examples, and this README when behavior or public APIs change. Project documentation is intentionally kept in this main README. CI cancels superseded runs for the same branch. NuGet packages are published only from GitHub Releases whose tags use a package version such as `v1.2.3`; the release workflow derives the NuGet version from that tag and publishes only after build, tests, coverage, and all examples succeed. Packages include repository/source metadata, Source Link support, and `.snupkg` symbols for source-level debugging.
 
 ### Dependency Injection example
 

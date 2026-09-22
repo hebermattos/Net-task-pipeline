@@ -67,7 +67,7 @@ public sealed class TaskBranchBuilderTests
     }
 
     [Fact]
-    public async Task AddBranch_WithNoMatchingValueAndNoDefault_ReturnsNoTaskResults()
+    public async Task AddBranch_WithNoMatchingValueAndNoDefault_ReturnsFailedResult()
     {
         var context = new TaskContext();
         context.Set("CustomerType", "unknown");
@@ -79,8 +79,10 @@ public sealed class TaskBranchBuilderTests
                 name: "Customer type")
             .ExecuteAsync(context);
 
-        Assert.True(result.Success);
-        Assert.Empty(result.TaskResults);
+        var taskResult = Assert.Single(result.TaskResults);
+        Assert.False(result.Success);
+        Assert.Equal(TaskExecutionStatus.Failed, taskResult.Status);
+        Assert.IsType<InvalidOperationException>(taskResult.Exception);
     }
 
     [Fact]

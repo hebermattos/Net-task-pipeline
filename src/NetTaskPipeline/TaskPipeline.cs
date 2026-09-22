@@ -247,12 +247,10 @@ public sealed class TaskPipeline
     {
         using var groupCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var maxDegreeOfParallelism = Math.Min(_maxDegreeOfParallelism ?? group.Tasks.Count, group.Tasks.Count);
-        using var semaphore = new SemaphoreSlim(maxDegreeOfParallelism);
-
-        var executions = group.Tasks.Select(async pipelineTask =>
-        {
-            await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-            try
+        return await ParallelTaskExecutor.ExecuteAsync(
+            group.Tasks,
+            maxDegreeOfParallelism,
+            async (pipelineTask, _) =>
             {
                 if (groupCancellationTokenSource.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
                     return TaskExecutionResult.Skipped(pipelineTask.Name, groupIndex);
@@ -270,14 +268,8 @@ public sealed class TaskPipeline
                     groupCancellationTokenSource.Cancel();
 
                 return result;
-            }
-            finally
-            {
-                semaphore.Release();
-            }
-        });
-
-        return await Task.WhenAll(executions).ConfigureAwait(false);
+            },
+            cancellationToken).ConfigureAwait(false);
     }
 
     private TaskExecutionOptions CreateExecutionOptions(PipelineTask task) => new TaskExecutionOptions

@@ -1,7 +1,7 @@
 # NetTaskPipeline
 
 [![NuGet](https://img.shields.io/nuget/v/NetTaskPipeline.svg)](https://www.nuget.org/packages/NetTaskPipeline)
-[![examples](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/examples.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/examples.yml)
+[![examples](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml)
 [![build and tests](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml)
 ![coverage](https://img.shields.io/badge/coverage-%E2%89%A580%25-green)
 

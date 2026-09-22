@@ -20,7 +20,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 10.0.x
       - name: Resolve and validate package version
         shell: bash
         run: |
@@ -41,7 +41,7 @@ jobs:
           package_path=$(find artifacts/packages -maxdepth 1 -name "NetTaskPipeline.$PACKAGE_VERSION.nupkg" -print -quit)
           test -n "$package_path"
           mkdir -p artifacts/smoke
-          dotnet new console --framework net8.0 --output artifacts/smoke/app
+          dotnet new console --framework net10.0 --output artifacts/smoke/app
           dotnet nuget add source "$(pwd)/artifacts/packages" --name local-package
           dotnet add artifacts/smoke/app/app.csproj package NetTaskPipeline --version "$PACKAGE_VERSION" --source "$(pwd)/artifacts/packages"
           cat > artifacts/smoke/app/Program.cs <<'EOF'

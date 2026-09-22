@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -14,21 +13,28 @@ internal static class ParallelTaskExecutor
         Func<TItem, CancellationToken, Task<TResult>> execute,
         CancellationToken cancellationToken)
     {
-        using var semaphore = new SemaphoreSlim(maxDegreeOfParallelism);
+        var results = new TResult[items.Count];
+        var nextIndex = -1;
+        var workerCount = Math.Min(maxDegreeOfParallelism, items.Count);
+        var workers = new Task[workerCount];
 
-        var executions = items.Select(async item =>
+        for (var workerIndex = 0; workerIndex < workerCount; workerIndex++)
+            workers[workerIndex] = RunWorkerAsync();
+
+        await Task.WhenAll(workers).ConfigureAwait(false);
+        return results;
+
+        async Task RunWorkerAsync()
         {
-            await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-            try
+            while (true)
             {
-                return await execute(item, cancellationToken).ConfigureAwait(false);
-            }
-            finally
-            {
-                semaphore.Release();
-            }
-        });
+                cancellationToken.ThrowIfCancellationRequested();
+                var index = Interlocked.Increment(ref nextIndex);
+                if (index >= items.Count)
+                    return;
 
-        return await Task.WhenAll(executions).ConfigureAwait(false);
+                results[index] = await execute(items[index], cancellationToken).ConfigureAwait(false);
+            }
+        }
     }
 }

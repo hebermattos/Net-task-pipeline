@@ -128,7 +128,7 @@ await new TaskPipeline()
     .ExecuteAsync(context);
 ```
 
-The selector also has an asynchronous overload that receives a `CancellationToken`.
+The selector also has an asynchronous overload that receives a `CancellationToken`. If no case matches and no `Default` flow is configured, the branch returns a failed execution result instead of silently succeeding.
 
 ## Reliability
 
@@ -144,7 +144,7 @@ await new TaskPipeline()
     .ExecuteAsync();
 ```
 
-Without `WithRetryDelay`, retries are immediate. Exponential backoff is overflow-safe, and optional jitter can spread concurrent retries (`WithRetryDelay(delay, exponentialBackoff: true, jitter: true)`). Use `WithRetryPolicy(exception => ...)` to retry only selected failures. External cancellation is never retried; task timeouts remain failures and can be filtered by the retry policy. Per-task settings override the pipeline defaults where supported:
+Without `WithRetryDelay`, retries are immediate. Exponential backoff is overflow-safe, and optional jitter can spread concurrent retries (`WithRetryDelay(delay, exponentialBackoff: true, jitter: true)`). Use `WithRetryPolicy(exception => ...)` to retry only selected failures. External cancellation is never retried; task timeouts remain failures and can be filtered by the retry policy. Timeouts are cooperative: the pipeline cancels the token at the configured deadline, so tasks should observe the supplied `CancellationToken`. If a task ignores cancellation, the pipeline waits for it to return and still records a timeout failure once it completes. Per-task settings override the pipeline defaults where supported:
 
 ```csharp
 await new TaskPipeline()
@@ -224,7 +224,7 @@ Internally, task resolution uses `ActivatorUtilities.GetServiceOrCreateInstance`
 
 ## Results
 
-`ExecuteAsync` returns a `TaskPipelineResult` containing the final context and task execution results.
+`ExecuteAsync` returns a `TaskPipelineResult` containing the final context and task execution results. Execution result properties are read-only to consumers so recorded status, attempts, timing, and exceptions cannot be mutated after execution.
 
 ```csharp
 var result = await pipeline.ExecuteAsync();

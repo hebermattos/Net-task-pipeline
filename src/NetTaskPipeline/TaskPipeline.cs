@@ -10,8 +10,6 @@ namespace NetTaskPipeline;
 /// <summary>Executes tasks in sequential groups, allowing each group to run one or more tasks in parallel.</summary>
 public sealed class TaskPipeline
 {
-    private static readonly Random JitterRandom = new Random();
-    private static readonly object JitterLock = new object();
     private readonly List<IPipelineStep> _steps = new List<IPipelineStep>();
     private Func<Type, ITask>? _taskFactory;
     private ErrorMode _errorMode = ErrorMode.StopOnFirstError;
@@ -45,21 +43,7 @@ public sealed class TaskPipeline
         if (delay < TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(delay), "Retry delay cannot be negative.");
 
-        _retryDelay = attempt =>
-        {
-            var multiplier = exponentialBackoff ? Math.Pow(2, Math.Min(attempt - 1, 20)) : 1d;
-            var ticks = Math.Min(delay.Ticks * multiplier, TimeSpan.MaxValue.Ticks);
-            if (jitter && ticks > 0)
-            {
-                double jitterFactor;
-                lock (JitterLock)
-                    jitterFactor = 0.5d + JitterRandom.NextDouble() * 0.5d;
-
-                ticks *= jitterFactor;
-            }
-
-            return TimeSpan.FromTicks((long)ticks);
-        };
+        _retryDelay = RetryDelayStrategy.Create(delay, exponentialBackoff, jitter);
         return this;
     }
 
@@ -222,7 +206,7 @@ public sealed class TaskPipeline
         return pipeline;
     }
 
-    private async Task<IReadOnlyList<TaskExecutionResult>> ExecuteTaskGroupStepAsync(TaskGroup group, TaskContext context, int groupIndex, CancellationToken cancellationToken)
+    internal async Task<IReadOnlyList<TaskExecutionResult>> ExecuteTaskGroupStepAsync(TaskGroup group, TaskContext context, int groupIndex, CancellationToken cancellationToken)
     {
         if (group.IsParallel)
             return await ExecuteParallelGroupAsync(group, context, groupIndex, cancellationToken).ConfigureAwait(false);
@@ -276,7 +260,7 @@ public sealed class TaskPipeline
         ShouldRetry = _shouldRetry
     };
 
-    private static TaskExecutionResult CreateBranchFailureResult(string branchName, int groupIndex, Exception exception)
+    internal static TaskExecutionResult CreateBranchFailureResult(string branchName, int groupIndex, Exception exception)
     {
         var now = DateTimeOffset.UtcNow;
         return new TaskExecutionResult
@@ -292,107 +276,4 @@ public sealed class TaskPipeline
         };
     }
 
-    private sealed class PipelineTask
-    {
-        public PipelineTask(ITask task, string name, int? retryCount, TimeSpan? timeout)
-        {
-            Task = task;
-            Name = name;
-            RetryCount = retryCount;
-            Timeout = timeout;
-        }
-
-        public ITask Task { get; }
-        public string Name { get; }
-        public int? RetryCount { get; }
-        public TimeSpan? Timeout { get; }
-    }
-
-    private interface IPipelineStep
-    {
-        Task<IReadOnlyList<TaskExecutionResult>> ExecuteAsync(TaskPipeline pipeline, TaskContext context, int groupIndex, CancellationToken cancellationToken);
-    }
-
-    private sealed class TaskGroupStep : IPipelineStep
-    {
-        public TaskGroupStep(TaskGroup group)
-        {
-            Group = group;
-        }
-
-        private TaskGroup Group { get; }
-
-        public Task<IReadOnlyList<TaskExecutionResult>> ExecuteAsync(TaskPipeline pipeline, TaskContext context, int groupIndex, CancellationToken cancellationToken)
-        {
-            return pipeline.ExecuteTaskGroupStepAsync(Group, context, groupIndex, cancellationToken);
-        }
-    }
-
-    private sealed class ValueBranchStep<TValue> : IPipelineStep
-    {
-        public ValueBranchStep(string name, Func<TaskContext, CancellationToken, Task<TValue>> selector, IReadOnlyList<ValueBranchCase<TValue>> cases, TaskPipeline? defaultPipeline)
-        {
-            Name = name;
-            Selector = selector;
-            Cases = cases;
-            DefaultPipeline = defaultPipeline;
-        }
-
-        public string Name { get; }
-        public Func<TaskContext, CancellationToken, Task<TValue>> Selector { get; }
-        public IReadOnlyList<ValueBranchCase<TValue>> Cases { get; }
-        public TaskPipeline? DefaultPipeline { get; }
-
-        public async Task<IReadOnlyList<TaskExecutionResult>> ExecuteAsync(TaskPipeline pipeline, TaskContext context, int groupIndex, CancellationToken cancellationToken)
-        {
-            TValue selectedValue;
-            try
-            {
-                selectedValue = await Selector(context, cancellationToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                return new[] { CreateBranchFailureResult(Name, groupIndex, ex) };
-            }
-
-            var selectedPipeline = Cases.FirstOrDefault(branchCase => EqualityComparer<TValue>.Default.Equals(branchCase.Value, selectedValue))?.Pipeline
-                ?? DefaultPipeline;
-
-            if (selectedPipeline == null)
-                return Array.Empty<TaskExecutionResult>();
-
-            var branchResult = await selectedPipeline.ExecuteAsync(context, cancellationToken).ConfigureAwait(false);
-            return branchResult.TaskResults;
-        }
-    }
-
-    private sealed class ValueBranchCase<TValue>
-    {
-        public ValueBranchCase(TValue value, TaskPipeline pipeline)
-        {
-            Value = value;
-            Pipeline = pipeline;
-        }
-
-        public TValue Value { get; }
-        public TaskPipeline Pipeline { get; }
-    }
-
-    private sealed class TaskGroup
-    {
-        private TaskGroup(bool isParallel, IReadOnlyList<PipelineTask> tasks)
-        {
-            IsParallel = isParallel;
-            Tasks = tasks;
-        }
-
-        public bool IsParallel { get; }
-        public IReadOnlyList<PipelineTask> Tasks { get; }
-        public static TaskGroup Sequential(PipelineTask task) => new TaskGroup(false, new[] { task });
-        public static TaskGroup Parallel(IReadOnlyList<PipelineTask> tasks) => new TaskGroup(true, tasks);
-    }
 }

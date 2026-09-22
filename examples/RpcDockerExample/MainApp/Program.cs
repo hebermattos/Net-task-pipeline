@@ -53,6 +53,17 @@ if (result.Success)
 
     Console.WriteLine("Order RPC response:");
     Console.WriteLine(JsonSerializer.Serialize(orderResponse, jsonOptions));
+
+    if (customerResponse.CustomerId != 123 || customerResponse.Status != "Active" ||
+        orderResponse.OrderId != 987 || orderResponse.CustomerId != 123 || !orderResponse.Approved)
+    {
+        Console.Error.WriteLine("RPC example returned unexpected data.");
+        Environment.ExitCode = 1;
+    }
+}
+else
+{
+    Environment.ExitCode = 1;
 }
 
 public static class RpcQueues

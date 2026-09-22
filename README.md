@@ -492,7 +492,7 @@ foreach (var taskResult in result.TaskResults)
 
 ## Runnable examples
 
-The repository includes runnable examples. GitHub Actions runs all examples on pushes and pull requests to `main`, including the RabbitMQ RPC Docker example.
+The repository includes runnable examples. GitHub Actions runs and validates their expected results on pushes and pull requests to `main`, including the RabbitMQ RPC Docker example.
 
 ```bash
 dotnet run --project examples/SimpleExample/SimpleExample.csproj
@@ -510,7 +510,7 @@ docker compose up --build
 
 ## Development
 
-Pull requests must keep line coverage at or above 80% for unit-testable code. RabbitMQ transport/RPC files are integration-bound and excluded from the unit coverage gate; their integration validation remains separate. Code changes should update affected tests, examples, and this README when behavior or public APIs change. Project documentation is intentionally kept in this main README.
+Pull requests must keep line coverage at or above 80% for unit-testable code. RabbitMQ transport/RPC files are integration-bound and excluded from the unit coverage gate; their integration validation remains separate. Code changes should update affected tests, examples, and this README when behavior or public APIs change. Project documentation is intentionally kept in this main README. CI cancels superseded runs for the same branch. NuGet packages are published only from GitHub Releases whose tags use a package version such as `v1.2.3`; the release workflow derives the NuGet version from that tag and publishes only after build, tests, coverage, and all examples succeed.
 
 ### Dependency Injection example
 

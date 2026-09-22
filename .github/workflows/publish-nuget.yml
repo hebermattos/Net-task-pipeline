@@ -40,3 +40,5 @@ jobs:
         run: dotnet pack src/NetTaskPipeline/NetTaskPipeline.csproj --configuration Release --no-restore --output artifacts/packages -p:PackageVersion=$PACKAGE_VERSION
       - name: Publish to NuGet
         run: dotnet nuget push "artifacts/packages/*.nupkg" --api-key "${{ secrets.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json
+      - name: Publish symbols to NuGet
+        run: dotnet nuget push "artifacts/packages/*.snupkg" --api-key "${{ secrets.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json

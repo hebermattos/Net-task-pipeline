@@ -2,11 +2,14 @@ name: build-and-tests
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
+  workflow_call:
+
+concurrency:
+  group: build-and-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -14,43 +17,27 @@ permissions:
 jobs:
   tests:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-
       - name: Restore
         run: dotnet restore TaskPipeline.sln
-
       - name: Build
         run: dotnet build TaskPipeline.sln --configuration Release --no-restore
-
       - name: Pack
         run: dotnet pack src/NetTaskPipeline/NetTaskPipeline.csproj --configuration Release --no-build --output artifacts/packages
-
       - name: Test with coverage
         run: dotnet test tests/NetTaskPipeline.Tests/NetTaskPipeline.Tests.csproj --configuration Release --no-build --collect:"XPlat Code Coverage" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.ExcludeByFile="**/RabbitMq*.cs,**/TaskRpc*.cs"
-
       - name: Enforce 80% line coverage
         shell: pwsh
         run: |
           $coverageFile = Get-ChildItem -Path "tests/NetTaskPipeline.Tests/TestResults" -Filter "coverage.cobertura.xml" -Recurse | Select-Object -First 1
-
-          if (-not $coverageFile) {
-            throw "Coverage file was not found."
-          }
-
+          if (-not $coverageFile) { throw "Coverage file was not found." }
           [xml]$coverage = Get-Content $coverageFile.FullName
-          $lineRate = [double]$coverage.coverage.'line-rate'
-          $percent = [math]::Round($lineRate * 100, 2)
-
+          $percent = [math]::Round(([double]$coverage.coverage.'line-rate') * 100, 2)
           Write-Host "Line coverage: $percent%"
-
-          if ($percent -lt 80) {
-            throw "Line coverage $percent% is below the required 80%."
-          }
+          if ($percent -lt 80) { throw "Line coverage $percent% is below the required 80%." }

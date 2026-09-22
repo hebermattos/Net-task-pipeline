@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  group: examples-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -17,7 +22,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        example: [SimpleExample, AdvancedExample, BranchingExample, DependencyInjectionExample, HttpExample]
+        include:
+          - example: SimpleExample
+            expected: "Pipeline success: True"
+          - example: AdvancedExample
+            expected: "External confirmation: EXT-OK-123"
+          - example: BranchingExample
+            expected: "Discount applied: True"
+          - example: DependencyInjectionExample
+            expected: "Notification sent: True"
+          - example: HttpExample
+            expected: "Pipeline success: True"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,17 +40,23 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-      - name: Run example
+      - name: Run and validate example
         timeout-minutes: 5
-        run: dotnet run --project examples/${{ matrix.example }}/${{ matrix.example }}.csproj --configuration Release
+        shell: bash
+        run: |
+          set -o pipefail
+          output=$(dotnet run --project "examples/${{ matrix.example }}/${{ matrix.example }}.csproj" --configuration Release)
+          printf '%s\n' "$output"
+          grep -Fq "${{ matrix.expected }}" <<< "$output"
 
   rabbitmq-rpc-example:
     name: Run RabbitMQ RPC example
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Start example
+      - name: Start and validate example
         working-directory: examples/RpcDockerExample
         run: docker compose up --build --abort-on-container-exit --exit-code-from main-app
       - name: Show container logs

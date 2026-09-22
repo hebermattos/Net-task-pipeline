@@ -10,8 +10,6 @@ namespace NetTaskPipeline;
 /// <summary>Executes tasks in sequential groups, allowing each group to run one or more tasks in parallel.</summary>
 public sealed class TaskPipeline
 {
-    private static readonly Random JitterRandom = new Random();
-    private static readonly object JitterLock = new object();
     private readonly List<IPipelineStep> _steps = new List<IPipelineStep>();
     private Func<Type, ITask>? _taskFactory;
     private ErrorMode _errorMode = ErrorMode.StopOnFirstError;
@@ -45,21 +43,7 @@ public sealed class TaskPipeline
         if (delay < TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(delay), "Retry delay cannot be negative.");
 
-        _retryDelay = attempt =>
-        {
-            var multiplier = exponentialBackoff ? Math.Pow(2, Math.Min(attempt - 1, 20)) : 1d;
-            var ticks = Math.Min(delay.Ticks * multiplier, TimeSpan.MaxValue.Ticks);
-            if (jitter && ticks > 0)
-            {
-                double jitterFactor;
-                lock (JitterLock)
-                    jitterFactor = 0.5d + JitterRandom.NextDouble() * 0.5d;
-
-                ticks *= jitterFactor;
-            }
-
-            return TimeSpan.FromTicks((long)ticks);
-        };
+        _retryDelay = RetryDelayStrategy.Create(delay, exponentialBackoff, jitter);
         return this;
     }
 
@@ -363,7 +347,7 @@ public sealed class TaskPipeline
                 ?? DefaultPipeline;
 
             if (selectedPipeline == null)
-                return Array.Empty<TaskExecutionResult>();
+                return new[] { CreateBranchFailureResult(Name, groupIndex, new InvalidOperationException($"No branch matched the selected value '{selectedValue}' and no default branch was configured.")) };
 
             var branchResult = await selectedPipeline.ExecuteAsync(context, cancellationToken).ConfigureAwait(false);
             return branchResult.TaskResults;

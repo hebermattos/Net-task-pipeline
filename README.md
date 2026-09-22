@@ -5,7 +5,7 @@
 [![build and tests](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml/badge.svg)](https://github.com/hebermattos/Net-task-pipeline/actions/workflows/tests.yml)
 ![coverage](https://img.shields.io/badge/coverage-%E2%89%A580%25-green)
 
-A lightweight async task pipeline for .NET with sequential and parallel execution, branching, retries, timeouts, Dependency Injection, HTTP tasks, and RabbitMQ RPC.
+A lightweight async task pipeline targeting .NET 10 LTS and .NET Standard 2.0, with sequential and parallel execution, branching, retries, timeouts, Dependency Injection, HTTP tasks, and RabbitMQ RPC.
 
 ## Installation
 
@@ -278,7 +278,7 @@ GitHub Actions executes all examples on pushes and pull requests to `main` and v
 
 RabbitMQ transport/RPC files are excluded from the **unit** coverage gate because they are integration-bound; they are covered separately by the RabbitMQ integration job. The ≥80% badge therefore represents the unit-testable-code gate, not aggregate coverage across every source file.
 
-Code changes should keep tests and examples current. Project documentation is intentionally maintained only in this root `README.md`.
+The project uses .NET 10 LTS for development, tests, CI, examples, and release validation while retaining `netstandard2.0` as a library target for broad consumer compatibility.\n\nCode changes should keep tests and examples current. Project documentation is intentionally maintained only in this root `README.md`.
 
 ## License
 

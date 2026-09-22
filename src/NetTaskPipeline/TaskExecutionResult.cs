@@ -10,42 +10,42 @@ public sealed class TaskExecutionResult
     /// <summary>
     /// Gets the task display name.
     /// </summary>
-    public string TaskName { get; set; } = string.Empty;
+    public string TaskName { get; internal set; } = string.Empty;
 
     /// <summary>
     /// Gets the index of the group that executed the task.
     /// </summary>
-    public int GroupIndex { get; set; }
+    public int GroupIndex { get; internal set; }
 
     /// <summary>
     /// Gets the number of attempts used to execute the task.
     /// </summary>
-    public int Attempts { get; set; }
+    public int Attempts { get; internal set; }
 
     /// <summary>
     /// Gets the final execution status.
     /// </summary>
-    public TaskExecutionStatus Status { get; set; }
+    public TaskExecutionStatus Status { get; internal set; }
 
     /// <summary>
     /// Gets the exception thrown by the task, if any.
     /// </summary>
-    public Exception? Exception { get; set; }
+    public Exception? Exception { get; internal set; }
 
     /// <summary>
     /// Gets the task execution duration.
     /// </summary>
-    public TimeSpan Duration { get; set; }
+    public TimeSpan Duration { get; internal set; }
 
     /// <summary>
     /// Gets the UTC start timestamp.
     /// </summary>
-    public DateTimeOffset StartedAt { get; set; }
+    public DateTimeOffset StartedAt { get; internal set; }
 
     /// <summary>
     /// Gets the UTC finish timestamp.
     /// </summary>
-    public DateTimeOffset FinishedAt { get; set; }
+    public DateTimeOffset FinishedAt { get; internal set; }
 
     /// <summary>
     /// Gets whether the task completed successfully.

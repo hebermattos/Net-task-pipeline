@@ -9,6 +9,7 @@ namespace NetTaskPipeline;
 /// </summary>
 public sealed class TaskPipelineResult
 {
+    private readonly IReadOnlyList<TaskExecutionResult> _errors;
     /// <summary>
     /// Initializes a new instance of the <see cref="TaskPipelineResult"/> class.
     /// </summary>
@@ -20,6 +21,7 @@ public sealed class TaskPipelineResult
         TaskResults = taskResults ?? throw new ArgumentNullException(nameof(taskResults));
         Context = context ?? throw new ArgumentNullException(nameof(context));
         Duration = duration;
+        _errors = taskResults.Where(result => !result.Success).ToList();
     }
 
     /// <summary>
@@ -45,8 +47,5 @@ public sealed class TaskPipelineResult
     /// <summary>
     /// Gets all non-successful task results.
     /// </summary>
-    public IReadOnlyList<TaskExecutionResult> Errors =>
-        TaskResults
-            .Where(result => !result.Success)
-            .ToList();
+    public IReadOnlyList<TaskExecutionResult> Errors => _errors;
 }
